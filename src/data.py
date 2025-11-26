@@ -36,7 +36,7 @@ def load_apps_dataset_prompt_only(
         remove_columns=["question", "input_output"],
         load_from_cache_file=False,
     )
-    dataset = dataset.filter(lambda row: row["prompt"] != [])
+    dataset = dataset.filter(lambda row: row["prompt"] != [] and row["tests"] != [])
     if max_samples is not None:
         dataset = dataset.select(range(min(len(dataset), max_samples)))
     return dataset
