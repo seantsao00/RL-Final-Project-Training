@@ -1,0 +1,36 @@
+# Model configuration
+model_name_or_path: Qwen/Qwen2.5-Coder-0.5B-Instruct
+dtype: auto
+
+# Script arguments
+dataset_train_split: train
+dataset_test_split: test
+dataset_train_max_samples: 1000
+
+# Training configuration (GRPOConfig)
+output_dir: ./checkpoints
+learning_rate: 1.0e-6
+per_device_train_batch_size: 4
+gradient_accumulation_steps: 8
+num_generations: 4
+num_train_epochs: 1
+max_prompt_length: 1024
+max_completion_length: 1024
+logging_steps: 10
+save_strategy: epoch
+# use_vllm: true
+# vllm_mode: colocate
+report_to: wandb
+run_name: rl-final-grpo-run
+temperature: 0.2
+
+# Reward configuration
+tests_weight: 1.0
+ruff_weight: 0.2
+mypy_weight: 0.2
+timeout_penalty: -1.0
+runtime_error_penalty: -1.5
+markdown_code_block_penalty: -0.1
+
+# Custom configurations
+seed: 42
