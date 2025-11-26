@@ -1,6 +1,7 @@
 import json
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -26,45 +27,66 @@ class MypyResult:
     n_errors: int
 
 
+def _run_single_test(
+    candidate_path: Path, test_input: str, expected_output: str, timeout_s: float
+) -> tuple[bool, bool, bool, str]:
+    """Run a single test and return (passed, timed_out, runtime_error, stderr)."""
+    try:
+        result = subprocess.run(
+            ["python", str(candidate_path)],
+            input=test_input,
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+        )
+
+        actual_output = result.stdout.strip()
+        stderr = result.stderr
+
+        if result.returncode != 0:
+            return False, False, True, stderr
+        elif actual_output == expected_output:
+            return True, False, False, stderr
+        else:
+            return False, False, False, stderr
+
+    except subprocess.TimeoutExpired:
+        return False, True, False, ""
+    except Exception as e:
+        return False, False, True, f"Exception: {str(e)}"
+
+
 def run_tests(
     candidate_path: Path, tests: list[tuple[str, str]], timeout_s: float = 5.0
 ) -> ExecutionResult:
-    n_passed = 0
     n_total = len(tests)
-    timed_out = False
-    runtime_error = False
-    stderr_output = ""
 
     if n_total == 0:
         return ExecutionResult(
             n_passed=0, n_total=0, timed_out=False, runtime_error=False, stderr=""
         )
 
-    for test_input, expected_output in tests:
-        try:
-            result = subprocess.run(
-                ["python", str(candidate_path)],
-                input=test_input,
-                capture_output=True,
-                text=True,
-                timeout=timeout_s,
-            )
+    n_passed = 0
+    timed_out = False
+    runtime_error = False
+    stderr_output = ""
 
-            actual_output = result.stdout.strip()
-            stderr_output += result.stderr
+    with ThreadPoolExecutor() as executor:
+        futures = {
+            executor.submit(_run_single_test, candidate_path, inp, exp, timeout_s): i
+            for i, (inp, exp) in enumerate(tests)
+        }
 
-            if result.returncode != 0:
-                runtime_error = True
-            elif actual_output == expected_output:
+        for future in as_completed(futures):
+            passed, timeout, error, stderr = future.result()
+            if passed:
                 n_passed += 1
-
-        except subprocess.TimeoutExpired:
-            timed_out = True
-            break
-        except Exception as e:
-            runtime_error = True
-            stderr_output += f"\nException: {str(e)}"
-            break
+            if timeout:
+                timed_out = True
+            if error:
+                runtime_error = True
+            if stderr:
+                stderr_output += stderr
 
     return ExecutionResult(
         n_passed=n_passed,
