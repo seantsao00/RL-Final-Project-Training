@@ -29,8 +29,11 @@ def main(
     set_seed(training_args.seed)
 
     print(f"Loading dataset: {script_args.dataset_train_split}")
-    dataset = load_apps_dataset_prompt_only(
+    train_dataset = load_apps_dataset_prompt_only(
         script_args.dataset_train_split, custom_args.dataset_train_max_samples
+    )
+    eval_dataset = load_apps_dataset_prompt_only(
+        script_args.dataset_test_split, custom_args.dataset_train_max_samples
     )
 
     def reward_function(
@@ -87,7 +90,8 @@ def main(
         model=model_args.model_name_or_path,
         reward_funcs=reward_function,
         args=training_args,
-        train_dataset=dataset,
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
         peft_config=get_peft_config(model_args),
     )
 
