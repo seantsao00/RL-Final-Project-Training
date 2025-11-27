@@ -21,8 +21,12 @@ save_strategy: epoch
 report_to: wandb
 run_name: rl-final-grpo-run
 temperature: 0.2
-eval_strategy: steps
-eval_steps: 2
+beta: 0.001
+
+# Evaluation configuration
+#eval_strategy: no
+#eval_steps: 5
+#per_device_eval_batch_size: 2
 
 # LoRA configuration
 use_peft: true
@@ -34,11 +38,11 @@ lora_target_modules: all-linear
 
 # Reward configuration
 tests_weight: 1.0
-ruff_weight: 0.2
-mypy_weight: 0.2
-timeout_penalty: -1.0
-runtime_error_penalty: -1.5
-markdown_code_block_penalty: -0.1
+ruff_weight: 0.0
+mypy_weight: 0.0
+timeout_penalty: 0.0
+runtime_error_penalty: -1.0
+markdown_code_block_penalty: 0.0
 
 # Custom configurations
 seed: 42

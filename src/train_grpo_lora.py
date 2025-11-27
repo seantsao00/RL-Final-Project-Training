@@ -9,8 +9,9 @@ from trl.trainer.grpo_trainer import GRPOTrainer
 from trl.trainer.model_config import ModelConfig
 from trl.trainer.utils import get_peft_config
 
-from .data import AppsSample, load_apps_dataset_prompt_only
-from .env import evaluate_candidate
+# from .data import AppsSample, load_apps_dataset_prompt_only
+from .data.apps_plus import AppsSample, load_apps_dataset_prompt_only
+from .env import evaluate_candidate_stdio
 from .reward import RewardConfig, compute_reward
 
 
@@ -58,8 +59,8 @@ def main(
 
             sample = AppsSample(question=question, tests=test_cases)
             try:
-                exec_res, ruff_res, mypy_res = evaluate_candidate(
-                    question, solution, sample
+                exec_res, ruff_res, mypy_res = evaluate_candidate_stdio(
+                    solution, sample
                 )
                 reward_value = compute_reward(
                     markdown_code_block, exec_res, ruff_res, mypy_res, reward_cfg

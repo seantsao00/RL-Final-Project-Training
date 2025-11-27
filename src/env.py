@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
-from .data import AppsSample
+from .data.apps_plus import AppsSample
 
 
 @dataclass
@@ -56,7 +56,7 @@ def _run_single_test(
         return False, False, True, f"Exception: {str(e)}"
 
 
-def run_tests(
+def run_tests_stdio(
     candidate_path: Path, tests: list[tuple[str, str]], timeout_s: float = 5.0
 ) -> ExecutionResult:
     n_total = len(tests)
@@ -95,6 +95,9 @@ def run_tests(
         runtime_error=runtime_error,
         stderr=stderr_output,
     )
+
+
+
 
 
 def run_ruff(candidate_path: Path) -> RuffResult:
@@ -149,15 +152,30 @@ def run_mypy(candidate_path: Path) -> MypyResult:
     return MypyResult(n_errors=n_errors)
 
 
-def evaluate_candidate(
-    prompt: str, code: str, sample: AppsSample
+def evaluate_candidate_stdio(
+    code: str, sample: AppsSample
 ) -> tuple[ExecutionResult, RuffResult, MypyResult]:
     with tempfile.TemporaryDirectory() as tmp_dir_str:
         tmp_dir = Path(tmp_dir_str)
         candidate_path = tmp_dir / "candidate.py"
         candidate_path.write_text(code)
 
-        exec_result = run_tests(candidate_path, sample.tests)
+        exec_result = run_tests_stdio(candidate_path, sample.tests)
+        ruff_result = run_ruff(candidate_path)
+        mypy_result = run_mypy(candidate_path)
+
+    return exec_result, ruff_result, mypy_result
+
+
+def evaluate_candidate_function(
+    code: str, sample: AppsSample
+) -> tuple[ExecutionResult, RuffResult, MypyResult]:
+    with tempfile.TemporaryDirectory() as tmp_dir_str:
+        tmp_dir = Path(tmp_dir_str)
+        candidate_path = tmp_dir / "candidate.py"
+        candidate_path.write_text(code)
+
+        exec_result = run_tests_stdio(candidate_path, sample.tests)
         ruff_result = run_ruff(candidate_path)
         mypy_result = run_mypy(candidate_path)
 

@@ -9,7 +9,7 @@ from trl.trainer.grpo_trainer import GRPOTrainer
 from trl.trainer.model_config import ModelConfig
 
 from .data import AppsSample, load_apps_dataset_prompt_only
-from .env import evaluate_candidate
+from .env import evaluate_candidate_stdio
 from .reward import RewardConfig, compute_reward
 
 
@@ -54,7 +54,7 @@ def main(
 
             sample = AppsSample(question=question, tests=test_cases)
             try:
-                exec_res, ruff_res, mypy_res = evaluate_candidate(
+                exec_res, ruff_res, mypy_res = evaluate_candidate_stdio(
                     question, solution, sample
                 )
                 reward_value = compute_reward(

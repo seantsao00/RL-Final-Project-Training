@@ -42,25 +42,23 @@ def load_apps_dataset_prompt_only(
     return dataset
 
 
-def get_system_prompt() -> str:
-    return """You are a Python coding assistant.
-Your output must be only Python code, no explanations, no comments, no markdown.
-The program must be a standalone solution using only the Python standard library.
-The program should read input exactly as described.
-The program should print only the required output.
-"""
-
-
-def get_user_prompt(question: str) -> str:
-    return f"""Question:
-{question}
-
-
-Solution pure Python program:
-"""
-
-
 def get_prompt_only_conversational_prompt(question: str) -> list[dict[str, str]]:
+    def get_system_prompt() -> str:
+        return """You are a Python coding assistant.
+    Your output must be only Python code, no explanations, no comments, no markdown.
+    The program must be a standalone solution using only the Python standard library.
+    The program should read input exactly as described.
+    The program should print only the required output.
+    """
+
+    def get_user_prompt(question: str) -> str:
+        return f"""Question:
+    {question}
+
+
+    Solution pure Python program:
+    """
+
     return [
         {"role": "system", "content": get_system_prompt()},
         {"role": "user", "content": get_user_prompt(question)},
@@ -80,3 +78,4 @@ def build_tests(input_output: str) -> list[tuple[str, str]]:
         assert isinstance(out, str)
         tests.append((inp, out))
     return tests
+
