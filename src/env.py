@@ -3,9 +3,18 @@ import subprocess
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 
 from .data import AppsSample
+
+
+class Verdict(Enum):
+    AC = "Accepted"
+    WA = "Wrong Answer"
+    TLE = "Time Limit Exceeded"
+    RE = "Runtime Error"
+    CE = "Compilation Error"
 
 
 @dataclass
@@ -14,6 +23,7 @@ class ExecutionResult:
     n_total: int
     timed_out: bool
     runtime_error: bool
+    syntax_error: bool
     stderr: str
 
 
@@ -29,8 +39,8 @@ class MypyResult:
 
 def _run_single_test(
     candidate_path: Path, test_input: str, expected_output: str, timeout_s: float
-) -> tuple[bool, bool, bool, str]:
-    """Run a single test and return (passed, timed_out, runtime_error, stderr)."""
+) -> tuple[Verdict, str]:
+    """Run a single test and return (verdict, stderr)."""
     expected_output = expected_output.strip()
     try:
         result = subprocess.run(
@@ -45,16 +55,16 @@ def _run_single_test(
         stderr = result.stderr
 
         if result.returncode != 0:
-            return False, False, True, stderr
+            return Verdict.RE, stderr
         elif actual_output == expected_output:
-            return True, False, False, stderr
+            return Verdict.AC, stderr
         else:
-            return False, False, False, stderr
+            return Verdict.WA, stderr
 
     except subprocess.TimeoutExpired:
-        return False, True, False, ""
+        return Verdict.TLE, ""
     except Exception as e:
-        return False, False, True, f"Exception: {str(e)}"
+        return Verdict.RE, f"Exception: {str(e)}"
 
 
 def run_tests(
@@ -67,7 +77,35 @@ def run_tests(
 
     if n_total == 0:
         return ExecutionResult(
-            n_passed=0, n_total=0, timed_out=False, runtime_error=False, stderr=""
+            n_passed=0,
+            n_total=0,
+            timed_out=False,
+            runtime_error=False,
+            syntax_error=False,
+            stderr="",
+        )
+
+    # Check for syntax errors first
+    try:
+        code = candidate_path.read_text()
+        compile(code, str(candidate_path), "exec")
+    except SyntaxError as e:
+        return ExecutionResult(
+            n_passed=0,
+            n_total=n_total,
+            timed_out=False,
+            runtime_error=False,
+            syntax_error=True,
+            stderr=str(e),
+        )
+    except Exception as e:
+        return ExecutionResult(
+            n_passed=0,
+            n_total=n_total,
+            timed_out=False,
+            runtime_error=False,
+            syntax_error=True,
+            stderr=str(e),
         )
 
     n_passed = 0
@@ -82,12 +120,12 @@ def run_tests(
         }
 
         for future in as_completed(futures):
-            passed, timeout, error, stderr = future.result()
-            if passed:
+            verdict, stderr = future.result()
+            if verdict is Verdict.AC:
                 n_passed += 1
-            if timeout:
+            elif verdict is Verdict.TLE:
                 timed_out = True
-            if error:
+            elif verdict is Verdict.RE:
                 runtime_error = True
             if stderr:
                 stderr_output += stderr
@@ -97,6 +135,7 @@ def run_tests(
         n_total=n_total,
         timed_out=timed_out,
         runtime_error=runtime_error,
+        syntax_error=False,
         stderr=stderr_output,
     )
 
@@ -154,7 +193,6 @@ def run_mypy(candidate_path: Path) -> MypyResult:
 
 
 def evaluate_candidate(
-    prompt: str,
     code: str,
     sample: AppsSample,
     max_workers: int | None = None,
