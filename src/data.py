@@ -1,31 +1,20 @@
 import json
 import sys
-from dataclasses import dataclass
 
 from datasets import Dataset, load_dataset
 
+# To prevent issues with large integers in test cases
 sys.set_int_max_str_digits(0)
-
-
-@dataclass
-class AppsSample:
-    question: str
-    tests: list[tuple[str, str]]  # List of (input, expected_output) test cases
 
 
 def load_apps_dataset_prompt_only(
     split: str, max_samples: int | None = None
 ) -> Dataset:
     def map_function(row: dict) -> dict:
-        mapped = {}
-        try:
-            mapped = {
-                "prompt": get_prompt_only_conversational_prompt(row["question"]),
-                "tests": build_tests(row["input_output"]),
-            }
-        except (AssertionError, json.JSONDecodeError):
-            mapped = {"prompt": [], "tests": []}
-        return mapped
+        return {
+            "prompt": question_to_prompt(row["question"]),
+            "tests": build_tests(row["input_output"]),
+        }
 
     dataset: Dataset = load_dataset(
         "codeparrot/apps", split=split, trust_remote_code=True
@@ -60,7 +49,7 @@ def get_user_prompt(question: str) -> str:
 """
 
 
-def get_prompt_only_conversational_prompt(question: str) -> list[dict[str, str]]:
+def question_to_prompt(question: str) -> list[dict[str, str]]:
     return [
         {"role": "system", "content": get_system_prompt()},
         {"role": "user", "content": get_user_prompt(question)},
@@ -68,15 +57,23 @@ def get_prompt_only_conversational_prompt(question: str) -> list[dict[str, str]]
 
 
 def build_tests(input_output: str) -> list[tuple[str, str]]:
-    tests: list[tuple[str, str]] = []
-    test_data: dict[str, list[str]] = json.loads(input_output)
-    assert isinstance(test_data, dict)
-    inputs: list[str] = test_data["inputs"]
-    assert isinstance(inputs, list)
-    outputs: list[str] = test_data["outputs"]
-    assert isinstance(outputs, list)
-    for inp, out in zip(inputs, outputs, strict=True):
-        assert isinstance(inp, str)
-        assert isinstance(out, str)
-        tests.append((inp, out))
-    return tests
+    """
+    Build test cases from the input_output JSON string.
+
+    Returns an empty list if any error occurs.
+    """
+    try:
+        tests: list[tuple[str, str]] = []
+        test_data: dict[str, list[str]] = json.loads(input_output)
+        assert isinstance(test_data, dict)
+        inputs: list[str] = test_data["inputs"]
+        assert isinstance(inputs, list)
+        outputs: list[str] = test_data["outputs"]
+        assert isinstance(outputs, list)
+        for inp, out in zip(inputs, outputs, strict=True):
+            assert isinstance(inp, str)
+            assert isinstance(out, str)
+            tests.append((inp, out))
+        return tests
+    except (AssertionError, KeyError, json.JSONDecodeError):
+        return []
