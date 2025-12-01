@@ -30,6 +30,7 @@ def load_apps_dataset_prompt_only(
     dataset: Dataset = load_dataset(
         "codeparrot/apps", split=split, trust_remote_code=True
     )  # type: ignore
+    dataset = dataset.filter(lambda row: row["difficulty"] in ["introductory"])
     dataset = dataset.select_columns(["question", "input_output"])
     dataset = dataset.map(
         map_function,
@@ -39,11 +40,13 @@ def load_apps_dataset_prompt_only(
     dataset = dataset.filter(lambda row: row["prompt"] != [] and row["tests"] != [])
     if max_samples is not None:
         dataset = dataset.select(range(min(len(dataset), max_samples)))
+    print(f"Loaded {len(dataset)} samples from Apps dataset with prompt only.")
     return dataset
 
 
 def get_system_prompt() -> str:
-    return """You are a Python coding assistant.
+    return """You are Qwen, created by Alibaba Cloud. You are a helpful assistant.
+You will be given a programming question and you must provide a solution in Python. 
 Your output must be only Python code, no explanations, no comments, no markdown.
 The program must be a standalone solution using only the Python standard library.
 The program should read input exactly as described.
@@ -54,9 +57,6 @@ The program should print only the required output.
 def get_user_prompt(question: str) -> str:
     return f"""Question:
 {question}
-
-
-Solution pure Python program:
 """
 
 
