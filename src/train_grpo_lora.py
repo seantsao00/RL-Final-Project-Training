@@ -2,7 +2,6 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from peft import LoraConfig
 from transformers import set_seed
 from trl.scripts.utils import ScriptArguments, TrlParser
 from trl.trainer.grpo_config import GRPOConfig
