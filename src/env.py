@@ -31,6 +31,7 @@ def _run_single_test(
     candidate_path: Path, test_input: str, expected_output: str, timeout_s: float
 ) -> tuple[bool, bool, bool, str]:
     """Run a single test and return (passed, timed_out, runtime_error, stderr)."""
+    expected_output = expected_output.strip()
     try:
         result = subprocess.run(
             ["python", str(candidate_path)],
