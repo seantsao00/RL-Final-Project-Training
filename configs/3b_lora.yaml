@@ -3,16 +3,16 @@ model_name_or_path: Qwen/Qwen2.5-Coder-3B-Instruct
 dtype: auto
 
 # Script arguments
-dataset_train_split: train
+dataset_train_split: test
 dataset_test_split: test
 dataset_train_max_samples: 1000
 
 # Training configuration (GRPOConfig)
 output_dir: ./checkpoints
-learning_rate: 1.0e-6
-per_device_train_batch_size: 1
-gradient_accumulation_steps: 12
-num_generations: 4
+learning_rate: 1.0e-5
+per_device_train_batch_size: 4
+gradient_accumulation_steps: 16
+num_generations: 8
 num_train_epochs: 3
 max_prompt_length: 1024
 max_completion_length: 1024
@@ -20,7 +20,7 @@ logging_steps: 1
 save_strategy: epoch
 report_to: wandb
 run_name: rl-final-grpo-run
-temperature: 0.2
+temperature: 0.7
 beta: 0.0
 
 # Evaluation configuration
@@ -30,20 +30,18 @@ beta: 0.0
 
 # LoRA configuration
 use_peft: true
-lora_r: 16
+lora_r: 8
+lora_alpha: 32
 lora_target_modules: all-linear
 # lora_target_modules:
 #   - q_proj
 #   - v_proj
 
 # Reward configuration
-tests_weight: 1.0
+tests_weight: 0.5
 ruff_weight: 0.0
-mypy_weight: 0.0
-timeout_penalty: 0.0
-runtime_error_penalty: -0.5
+mypy_weight: 0.5
 syntax_error_penalty: -1.0
-markdown_code_block_penalty: 0.0
 
 # Custom configurations
 seed: 42
