@@ -18,6 +18,14 @@ def _temp_code_file(code: str):
         yield candidate_path
 
 
+def _check_syntax_error(code: str) -> SyntaxError | None:
+    try:
+        compile(code, "<string>", "exec")
+        return None
+    except SyntaxError as e:
+        return e
+
+
 class Verdict(Enum):
     AC = "Accepted"
     WA = "Wrong Answer"
@@ -30,20 +38,22 @@ class Verdict(Enum):
 class ExecutionResult:
     n_passed: int
     n_total: int
-    syntax_error: bool
     stderr: str
+    syntax_error: bool = False
 
 
 @dataclass
 class RuffResult:
     n_issues: int
     messages: list[str]
+    syntax_error: bool = False
 
 
 @dataclass
 class MypyResult:
     n_errors: int
     messages: list[str]
+    syntax_error: bool = False
 
 
 def _run_single_test(
@@ -86,17 +96,9 @@ def evaluate_unit_tests(
     with _temp_code_file(code) as candidate_path:
         n_total = len(tests)
 
-        # Check for syntax errors first
-        try:
-            code = candidate_path.read_text()
-            compile(code, str(candidate_path), "exec")
-        except SyntaxError as e:
-            return ExecutionResult(
-                n_passed=0,
-                n_total=n_total,
-                syntax_error=True,
-                stderr=str(e),
-            )
+        syntax_err = _check_syntax_error(candidate_path.read_text())
+        if syntax_err:
+            return ExecutionResult(0, n_total, str(syntax_err), syntax_error=True)
 
         n_passed = 0
         stderr_output = ""
@@ -118,16 +120,16 @@ def evaluate_unit_tests(
         except Exception as e:
             print(f"Error during test execution: {e}")
 
-        return ExecutionResult(
-            n_passed=n_passed,
-            n_total=n_total,
-            syntax_error=False,
-            stderr=stderr_output,
-        )
+        return ExecutionResult(n_passed, n_total, stderr_output)
 
 
 def evaluate_ruff(code: str, select: list[str], ignore: list[str]) -> RuffResult:
     with _temp_code_file(code) as candidate_path:
+        # Check for syntax errors first
+        syntax_err = _check_syntax_error(candidate_path.read_text())
+        if syntax_err:
+            return RuffResult(0, [str(syntax_err)], True)
+
         n_issues = 0
         messages: list[str] = []
         try:
@@ -153,11 +155,16 @@ def evaluate_ruff(code: str, select: list[str], ignore: list[str]) -> RuffResult
         except Exception as e:
             print(f"Ruff error: {e}")
 
-        return RuffResult(n_issues=n_issues, messages=messages)
+        return RuffResult(n_issues, messages)
 
 
 def evaluate_mypy(code: str) -> MypyResult:
     with _temp_code_file(code) as candidate_path:
+        # Check for syntax errors first
+        syntax_err = _check_syntax_error(candidate_path.read_text())
+        if syntax_err:
+            return MypyResult(0, [str(syntax_err)], syntax_error=True)
+
         n_errors = 0
         messages: list[str] = []
         try:
@@ -185,4 +192,4 @@ def evaluate_mypy(code: str) -> MypyResult:
         except Exception as e:
             print(f"Mypy error: {e}")
 
-        return MypyResult(n_errors=n_errors, messages=messages)
+        return MypyResult(n_errors, messages)

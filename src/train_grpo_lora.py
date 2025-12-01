@@ -9,12 +9,7 @@ from trl.trainer.model_config import ModelConfig
 from trl.trainer.utils import get_peft_config
 
 from .data import load_apps_dataset_prompt_only
-from .reward import (
-    RewardConfig,
-    mypy_reward_function,
-    ruff_reward_function,
-    unit_test_reward_function,
-)
+from .reward import RewardConfig, create_reward_funcs
 
 
 @dataclass
@@ -46,19 +41,7 @@ def main(
         reward_cfg.mypy_weight,
     ]
 
-    def wrapped_unit_test_reward_function(*args, **kwargs):
-        return unit_test_reward_function(
-            *args,
-            syntax_error_penalty=reward_cfg.syntax_error_penalty,
-            test_threads=custom_args.test_threads,
-            **kwargs,
-        )
-
-    reward_funcs = [
-        wrapped_unit_test_reward_function,
-        ruff_reward_function,
-        mypy_reward_function,
-    ]
+    reward_funcs = create_reward_funcs(reward_cfg, custom_args.test_threads)
 
     if model_args.model_name_or_path is None:
         raise ValueError("Model name or path must be specified in model_args.")
