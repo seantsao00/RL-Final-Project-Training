@@ -6,10 +6,12 @@ from .env import evaluate_mypy, evaluate_ruff, evaluate_unit_tests
 
 @dataclass
 class RewardConfig:
-    tests_weight: float = 1.0
-    ruff_weight: float = 0.2
-    mypy_weight: float = 0.2
-    syntax_error_penalty: float = -1.0
+    tests_weight: float
+    ruff_weight: float
+    mypy_weight: float
+    syntax_error_penalty: float
+    ruff_select: list[str]
+    ruff_ignore: list[str]
 
 
 def _extract_code(completion: str) -> str:
@@ -30,7 +32,7 @@ def unit_test_reward_function(
     tests: list[list[tuple[str, str]]] = kwargs["tests"]
 
     rewards: list[float] = []
-    for solution, test_cases in zip(solutions, tests, strict=True):
+    for i, (solution, test_cases) in enumerate(zip(solutions, tests, strict=True)):
         result = evaluate_unit_tests(solution, test_cases, test_threads)
         if result.syntax_error:
             reward = syntax_error_penalty
@@ -38,7 +40,7 @@ def unit_test_reward_function(
             reward = result.n_passed / result.n_total if result.n_total > 0 else 0.0
         rewards.append(reward)
 
-        if solution == solutions[0]:
+        if i == 0:
             print("Unit Test Reward Debug Info:")
             for prompt in prompts[0]:
                 print(f"{prompt['role']}:\n{prompt['content']}\n")
@@ -48,6 +50,7 @@ def unit_test_reward_function(
             print("================================")
             print(f"Tests result: {result}")
             print(f"Calculated reward: {reward}")
+            print("================================")
 
     return rewards
 
@@ -55,20 +58,23 @@ def unit_test_reward_function(
 def ruff_reward_function(
     prompts: list[list[dict[str, str]]],
     completions: list[list[dict[str, str]]],
+    ruff_select: list[str],
+    ruff_ignore: list[str],
     **kwargs,
 ) -> list[float]:
     solutions = [_extract_code(comp[0]["content"]) for comp in completions]
 
     rewards: list[float] = []
-    for solution in solutions:
-        result = evaluate_ruff(solution)
+    for i, solution in enumerate(solutions):
+        result = evaluate_ruff(solution, select=ruff_select, ignore=ruff_ignore)
         reward = 1 / (1.0 + result.n_issues)
         rewards.append(reward)
 
-        if solution == solutions[0]:
+        if i == 0:
             print("Ruff Reward Debug Info:")
             print(f"Ruff result: {result}")
             print(f"Calculated reward: {reward}")
+            print("================================")
 
     return rewards
 
@@ -81,14 +87,15 @@ def mypy_reward_function(
     solutions = [_extract_code(comp[0]["content"]) for comp in completions]
 
     rewards: list[float] = []
-    for solution in solutions:
+    for i, solution in enumerate(solutions):
         result = evaluate_mypy(solution)
         reward = 1 / (1.0 + result.n_errors)
         rewards.append(reward)
 
-        if solution == solutions[0]:
+        if i == 0:
             print("Mypy Reward Debug Info:")
             print(f"Mypy result: {result}")
             print(f"Calculated reward: {reward}")
+            print("================================")
 
     return rewards

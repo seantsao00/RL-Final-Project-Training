@@ -126,7 +126,7 @@ def evaluate_unit_tests(
         )
 
 
-def evaluate_ruff(code: str) -> RuffResult:
+def evaluate_ruff(code: str, select: list[str], ignore: list[str]) -> RuffResult:
     with _temp_code_file(code) as candidate_path:
         n_issues = 0
         messages: list[str] = []
@@ -135,7 +135,8 @@ def evaluate_ruff(code: str) -> RuffResult:
                 [
                     "ruff",
                     "check",
-                    "--select=F,W,E,UP,C4,FA,ISC,RET,SIM,TID,TC,PTH,TD,NPY",
+                    "--select=" + ",".join(select),
+                    "--ignore=" + ",".join(ignore),
                     "--output-format=json",
                     candidate_path.as_posix(),
                 ],
