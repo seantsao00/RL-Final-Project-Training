@@ -37,11 +37,13 @@ class ExecutionResult:
 @dataclass
 class RuffResult:
     n_issues: int
+    messages: list[str]
 
 
 @dataclass
 class MypyResult:
     n_errors: int
+    messages: list[str]
 
 
 def _run_single_test(
@@ -52,8 +54,9 @@ def _run_single_test(
     try:
         result = subprocess.run(
             ["python", str(candidate_path)],
-            input=test_input,
+            cwd=candidate_path.parent,
             capture_output=True,
+            input=test_input,
             text=True,
             timeout=timeout_s,
         )
@@ -97,7 +100,6 @@ def evaluate_unit_tests(
 
         n_passed = 0
         stderr_output = ""
-
         try:
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 futures = [
@@ -126,6 +128,8 @@ def evaluate_unit_tests(
 
 def evaluate_ruff(code: str) -> RuffResult:
     with _temp_code_file(code) as candidate_path:
+        n_issues = 0
+        messages: list[str] = []
         try:
             result = subprocess.run(
                 [
@@ -142,19 +146,19 @@ def evaluate_ruff(code: str) -> RuffResult:
 
             if result.stdout:
                 issues = json.loads(result.stdout)
-                n_issues = len(issues) if isinstance(issues, list) else 0
-            else:
-                n_issues = 0
+                n_issues = len(issues)
+                messages = [issue["message"] for issue in issues]
 
         except Exception as e:
             print(f"Ruff error: {e}")
-            n_issues = 0
 
-        return RuffResult(n_issues=n_issues)
+        return RuffResult(n_issues=n_issues, messages=messages)
 
 
 def evaluate_mypy(code: str) -> MypyResult:
     with _temp_code_file(code) as candidate_path:
+        n_errors = 0
+        messages: list[str] = []
         try:
             result = subprocess.run(
                 [
@@ -175,9 +179,9 @@ def evaluate_mypy(code: str) -> MypyResult:
                 line for line in result.stdout.splitlines() if ": error:" in line
             ]
             n_errors = len(error_lines)
+            messages = error_lines
 
         except Exception as e:
             print(f"Mypy error: {e}")
-            n_errors = 0
 
-        return MypyResult(n_errors=n_errors)
+        return MypyResult(n_errors=n_errors, messages=messages)

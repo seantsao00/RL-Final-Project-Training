@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from functools import partial
 from pathlib import Path
 
 from transformers import AutoTokenizer, PreTrainedTokenizerBase, set_seed
@@ -46,12 +45,17 @@ def main(
         reward_cfg.ruff_weight,
         reward_cfg.mypy_weight,
     ]
-    reward_funcs = [
-        partial(
-            unit_test_reward_function,
+
+    def wrapped_unit_test_reward_function(*args, **kwargs):
+        return unit_test_reward_function(
+            *args,
             syntax_error_penalty=reward_cfg.syntax_error_penalty,
             test_threads=custom_args.test_threads,
-        ),
+            **kwargs,
+        )
+
+    reward_funcs = [
+        wrapped_unit_test_reward_function,
         ruff_reward_function,
         mypy_reward_function,
     ]
