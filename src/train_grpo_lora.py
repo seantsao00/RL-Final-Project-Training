@@ -2,7 +2,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from transformers import set_seed
+from transformers import AutoTokenizer, PreTrainedTokenizerBase, set_seed
 from trl.scripts.utils import ScriptArguments, TrlParser
 from trl.trainer.grpo_config import GRPOConfig
 from trl.trainer.grpo_trainer import GRPOTrainer
@@ -86,6 +86,10 @@ def main(
 
     if model_args.model_name_or_path is None:
         raise ValueError("Model name or path must be specified in model_args.")
+    tokenizer: PreTrainedTokenizerBase = AutoTokenizer.from_pretrained(
+        model_args.model_name_or_path
+    )
+    tokenizer.padding_side = "left"
     trainer = GRPOTrainer(
         model=model_args.model_name_or_path,
         reward_funcs=reward_function,
@@ -93,6 +97,7 @@ def main(
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         peft_config=get_peft_config(model_args),
+        processing_class=tokenizer,
     )
 
     print(f"Starting GRPO training for {training_args.num_train_epochs} epochs")
