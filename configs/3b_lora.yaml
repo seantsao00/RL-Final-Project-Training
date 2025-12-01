@@ -41,7 +41,8 @@ tests_weight: 1.0
 ruff_weight: 0.0
 mypy_weight: 0.0
 timeout_penalty: 0.0
-runtime_error_penalty: -1.0
+runtime_error_penalty: -0.5
+syntax_error_penalty: -1.0
 markdown_code_block_penalty: 0.0
 
 # Custom configurations

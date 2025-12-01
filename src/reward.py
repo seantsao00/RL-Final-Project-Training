@@ -10,6 +10,7 @@ class RewardConfig:
     mypy_weight: float = 0.2
     timeout_penalty: float = -1.0
     runtime_error_penalty: float = -0.5
+    syntax_error_penalty: float = -1.0
     markdown_code_block_penalty: float = -0.1
 
 
@@ -20,6 +21,9 @@ def compute_reward(
     mypy_res: MypyResult,
     cfg: RewardConfig,
 ) -> float:
+    if exec_res.syntax_error:
+        return cfg.syntax_error_penalty
+
     if exec_res.runtime_error:
         return cfg.runtime_error_penalty
 
