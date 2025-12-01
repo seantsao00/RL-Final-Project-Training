@@ -38,6 +38,17 @@ def unit_test_reward_function(
             reward = result.n_passed / result.n_total if result.n_total > 0 else 0.0
         rewards.append(reward)
 
+        if solution == solutions[0]:
+            print("Unit Test Reward Debug Info:")
+            for prompt in prompts[0]:
+                print(f"{prompt['role']}:\n{prompt['content']}\n")
+            print("================================")
+            for completion in completions[0]:
+                print(f"{completion['role']}:\n{completion['content']}\n")
+            print("================================")
+            print(f"Tests result: {result}")
+            print(f"Calculated reward: {reward}")
+
     return rewards
 
 
@@ -54,6 +65,11 @@ def ruff_reward_function(
         reward = 1 / (1.0 + result.n_issues)
         rewards.append(reward)
 
+        if solution == solutions[0]:
+            print("Ruff Reward Debug Info:")
+            print(f"Ruff result: {result}")
+            print(f"Calculated reward: {reward}")
+
     return rewards
 
 
@@ -69,5 +85,10 @@ def mypy_reward_function(
         result = evaluate_mypy(solution)
         reward = 1 / (1.0 + result.n_errors)
         rewards.append(reward)
+
+        if solution == solutions[0]:
+            print("Mypy Reward Debug Info:")
+            print(f"Mypy result: {result}")
+            print(f"Calculated reward: {reward}")
 
     return rewards

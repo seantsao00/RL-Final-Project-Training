@@ -38,13 +38,10 @@ lora_target_modules: all-linear
 #   - v_proj
 
 # Reward configuration
-tests_weight: 1.0
+tests_weight: 0.5
 ruff_weight: 0.0
-mypy_weight: 0.0
-timeout_penalty: 0.0
-runtime_error_penalty: -0.5
+mypy_weight: 0.5
 syntax_error_penalty: -1.0
-markdown_code_block_penalty: 0.0
 
 # Custom configurations
 seed: 42
