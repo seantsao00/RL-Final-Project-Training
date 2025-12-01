@@ -1,5 +1,5 @@
-import re
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 from transformers import AutoTokenizer, PreTrainedTokenizerBase, set_seed
@@ -9,9 +9,13 @@ from trl.trainer.grpo_trainer import GRPOTrainer
 from trl.trainer.model_config import ModelConfig
 from trl.trainer.utils import get_peft_config
 
-from .data import AppsSample, load_apps_dataset_prompt_only
-from .env import evaluate_candidate
-from .reward import RewardConfig, compute_reward
+from .data import load_apps_dataset_prompt_only
+from .reward import (
+    RewardConfig,
+    mypy_reward_function,
+    ruff_reward_function,
+    unit_test_reward_function,
+)
 
 
 @dataclass
@@ -37,60 +41,20 @@ def main(
         script_args.dataset_test_split, custom_args.dataset_train_max_samples
     )
 
-    def reward_function(
-        prompts: list[list[dict[str, str]]],
-        completions: list[list[dict[str, str]]],
-        **kwargs,
-    ) -> list[float]:
-        rewards: list[float] = []
-
-        questions = [prompt[1]["content"] for prompt in prompts]
-        solutions = [prompt[0]["content"] for prompt in completions]
-        tests: list[list[tuple[str, str]]] = kwargs["tests"]
-
-        for i, (question, solution, test_cases) in enumerate(
-            zip(questions, solutions, tests, strict=True)
-        ):
-            markdown_code_block = False
-            match = re.search(r"```python(.*?)```", solution, re.DOTALL)
-            if match:
-                solution = match.group(1).strip()
-                markdown_code_block = True
-
-            sample = AppsSample(question=question, tests=test_cases)
-            try:
-                exec_res, ruff_res, mypy_res = evaluate_candidate(
-                    solution, sample, custom_args.test_threads
-                )
-                reward_value = compute_reward(
-                    markdown_code_block, exec_res, ruff_res, mypy_res, reward_cfg
-                )
-                if i == 0:
-                    print("Debug info from reward_function for first sample:")
-                    print("Prompts:")
-                    for prompt in prompts[i]:
-                        print(f"Role: {prompt['role']}")
-                        print("Content:")
-                        print(prompt["content"])
-                    print("================================")
-                    print("Completions:")
-                    for completion in completions[i]:
-                        print(f"Role: {completion['role']}")
-                        print("Content:")
-                        print(completion["content"])
-                    print("================================")
-                    print(f"Markdown Code Block: {markdown_code_block}")
-                    print(f"Execution Result: {exec_res}")
-                    print(f"Ruff Result: {ruff_res}")
-                    print(f"Mypy Result: {mypy_res}")
-                    print(f"Computed Reward: {reward_value}")
-            except Exception as e:
-                print(f"Evaluation error: {e}")
-                reward_value = -1.0
-
-            rewards.append(reward_value)
-
-        return rewards
+    training_args.reward_weights = [
+        reward_cfg.tests_weight,
+        reward_cfg.ruff_weight,
+        reward_cfg.mypy_weight,
+    ]
+    reward_funcs = [
+        partial(
+            unit_test_reward_function,
+            syntax_error_penalty=reward_cfg.syntax_error_penalty,
+            test_threads=custom_args.test_threads,
+        ),
+        ruff_reward_function,
+        mypy_reward_function,
+    ]
 
     if model_args.model_name_or_path is None:
         raise ValueError("Model name or path must be specified in model_args.")
@@ -100,12 +64,12 @@ def main(
     tokenizer.padding_side = "left"
     trainer = GRPOTrainer(
         model=model_args.model_name_or_path,
-        reward_funcs=reward_function,
+        processing_class=tokenizer,
+        reward_funcs=reward_funcs,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         peft_config=get_peft_config(model_args),
-        processing_class=tokenizer,
     )
 
     print(f"Starting GRPO training for {training_args.num_train_epochs} epochs")
