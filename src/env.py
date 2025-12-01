@@ -58,7 +58,10 @@ def _run_single_test(
 
 
 def run_tests(
-    candidate_path: Path, tests: list[tuple[str, str]], timeout_s: float = 5.0
+    candidate_path: Path,
+    tests: list[tuple[str, str]],
+    timeout_s: float = 5.0,
+    max_workers: int | None = None,
 ) -> ExecutionResult:
     n_total = len(tests)
 
@@ -72,7 +75,7 @@ def run_tests(
     runtime_error = False
     stderr_output = ""
 
-    with ThreadPoolExecutor() as executor:
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {
             executor.submit(_run_single_test, candidate_path, inp, exp, timeout_s): i
             for i, (inp, exp) in enumerate(tests)
@@ -151,14 +154,17 @@ def run_mypy(candidate_path: Path) -> MypyResult:
 
 
 def evaluate_candidate(
-    prompt: str, code: str, sample: AppsSample
+    prompt: str,
+    code: str,
+    sample: AppsSample,
+    max_workers: int | None = None,
 ) -> tuple[ExecutionResult, RuffResult, MypyResult]:
     with tempfile.TemporaryDirectory() as tmp_dir_str:
         tmp_dir = Path(tmp_dir_str)
         candidate_path = tmp_dir / "candidate.py"
         candidate_path.write_text(code)
 
-        exec_result = run_tests(candidate_path, sample.tests)
+        exec_result = run_tests(candidate_path, sample.tests, max_workers=max_workers)
         ruff_result = run_ruff(candidate_path)
         mypy_result = run_mypy(candidate_path)
 

@@ -17,6 +17,7 @@ from .reward import RewardConfig, compute_reward
 @dataclass
 class CustomArguments:
     dataset_train_max_samples: int | None = None
+    test_threads: int | None = None
 
 
 def main(
@@ -59,7 +60,7 @@ def main(
             sample = AppsSample(question=question, tests=test_cases)
             try:
                 exec_res, ruff_res, mypy_res = evaluate_candidate(
-                    question, solution, sample
+                    question, solution, sample, max_workers=custom_args.test_threads
                 )
                 reward_value = compute_reward(
                     markdown_code_block, exec_res, ruff_res, mypy_res, reward_cfg
