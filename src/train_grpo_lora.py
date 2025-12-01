@@ -67,10 +67,17 @@ def main(
                 )
                 if i == 0:
                     print("Debug info from reward_function for first sample:")
-                    print(f"Question: {question}")
+                    print("Prompts:")
+                    for prompt in prompts[i]:
+                        print(f"Role: {prompt['role']}")
+                        print("Content:")
+                        print(prompt["content"])
                     print("================================")
-                    print("Generated Solution:")
-                    print(solution)
+                    print("Completions:")
+                    for completion in completions[i]:
+                        print(f"Role: {completion['role']}")
+                        print("Content:")
+                        print(completion["content"])
                     print("================================")
                     print(f"Markdown Code Block: {markdown_code_block}")
                     print(f"Execution Result: {exec_res}")
