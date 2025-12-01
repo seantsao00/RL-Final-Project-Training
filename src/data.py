@@ -1,7 +1,10 @@
 import json
+import sys
 from dataclasses import dataclass
 
 from datasets import Dataset, load_dataset
+
+sys.set_int_max_str_digits(0)
 
 
 @dataclass
@@ -27,8 +30,6 @@ def load_apps_dataset_prompt_only(
     dataset: Dataset = load_dataset(
         "codeparrot/apps", split=split, trust_remote_code=True
     )  # type: ignore
-    if max_samples is not None:
-        dataset = dataset.select(range(max_samples))
     dataset = dataset.select_columns(["question", "input_output"])
     dataset = dataset.map(
         map_function,
@@ -36,6 +37,8 @@ def load_apps_dataset_prompt_only(
         load_from_cache_file=False,
     )
     dataset = dataset.filter(lambda row: row["prompt"] != [])
+    if max_samples is not None:
+        dataset = dataset.select(range(min(len(dataset), max_samples)))
     return dataset
 
 
