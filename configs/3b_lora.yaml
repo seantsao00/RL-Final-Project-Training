@@ -39,9 +39,27 @@ lora_target_modules: all-linear
 
 # Reward configuration
 tests_weight: 0.5
-ruff_weight: 0.0
-mypy_weight: 0.5
+ruff_weight: 0.25
+mypy_weight: 0.25
 syntax_error_penalty: -1.0
+ruff_select:
+- F    # Pyflakes (Correctness)
+- E    # pycodestyle (Style)
+- W    # pycodestyle (Style)
+- C90  # mccabe (Complexity)
+- N    # pep8-naming (Naming)
+- UP   # pyupgrade (Modern Python)
+- B    # flake8-bugbear (Bugs)
+- A    # flake8-builtins (Shadowing)
+- C4   # flake8-comprehensions (Performance)
+- RET  # flake8-return (Clean Returns)
+- SIM  # flake8-simplify (Code Simplification)
+- ARG  # flake8-unused-arguments (Cleanliness)
+
+ruff_ignore:
+- E501 # Line too long (often unavoidable in complex algorithmic one-liners or input parsing)
+- E741 # Ambiguous variable name (allows 'l', 'O', 'I' which are common in CP for pointers/indices)
+- W292 # No newline at end of file
 
 # Custom configurations
 seed: 42
