@@ -50,56 +50,10 @@ def load_apps_dataset_prompt_only(
     return dataset
 
 
-def load_classeval_dataset(
-    max_samples: int | None = None,
-    path: Path = (
-        Path(__file__).resolve().parents[1]
-        / "ClassEval"
-        / "data"
-        / "ClassEval_data.json"
-    ),
-) -> Dataset:
-    """
-    This function loads the ClassEval dataset and returns a `datasets.Dataset` object.
-    It keeps all original fields to support Incremental and Compositional generation strategies.
-    """
-
-    dataset: Dataset
-    if path is None:
-        dataset = load_dataset(
-            "FudanSELab/ClassEval", split="test", trust_remote_code=True
-        )
-    else:
-        dataset = load_dataset(
-            "json",
-            data_files=str(path),
-        )
-
-    def map_prompt(row: dict) -> dict:
-        mapped = {
-            "prompt": get_prompt_only_conversational_prompt(
-                row["skeleton"], dataset_name="classeval"
-            ),
-        }
-        return mapped
-
-    dataset = dataset.map(
-        map_prompt,
-        load_from_cache_file=False,
-    )
-
-    dataset = dataset.filter(lambda row: row["prompt"] != [])
-
-    if max_samples is not None:
-        dataset = dataset.select(range(min(len(dataset), max_samples)))
-
-    return dataset
-
-
 def load_classeval_dataset_prompt_only(
-    max_samples: int | None = None,
+    start: int = 0, end : int = -1,
     path: Path = (
-        Path(__file__).resolve().parents[1]
+        Path(__file__).resolve().parents[2]
         / "ClassEval"
         / "data"
         / "ClassEval_data.json"
@@ -129,7 +83,7 @@ def load_classeval_dataset_prompt_only(
         import_statement = class_data["import_statement"]
         class_description = class_data["class_description"]
         class_constructor = class_data["class_constructor"]
-        class_test_code = class_data["test_code"]
+        class_test_code = class_data["test"]
         methods_info = class_data["methods_info"]
         skeleton = class_data["skeleton"]
 
@@ -158,8 +112,9 @@ def load_classeval_dataset_prompt_only(
 
     dataset = Dataset.from_list(compositional_rows)
 
-    if max_samples is not None:
-        dataset = dataset.select(range(min(len(dataset), max_samples)))
+    if end < 0:
+        end = len(dataset) + end + 1
+    dataset = dataset.select(range(start, end))
 
     return dataset
 
