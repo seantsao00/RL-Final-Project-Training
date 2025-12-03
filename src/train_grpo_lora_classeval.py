@@ -19,8 +19,7 @@ from .reward_classeval import (
 
 @dataclass
 class CustomArguments:
-    dataset_train_max_samples: int | None = None
-    test_threads: int | None = None
+    dataset_train_split_end: int | None = None
 
 
 def main(
@@ -34,10 +33,10 @@ def main(
 
     print("Loading Classeval compositional dataset")
     train_dataset = load_classeval_dataset_prompt_only(
-        custom_args.dataset_train_max_samples
+        0, custom_args.dataset_train_split_end
     )
     eval_dataset = load_classeval_dataset_prompt_only(
-        custom_args.dataset_train_max_samples
+        custom_args.dataset_train_split_end, 100
     )
 
     training_args.reward_weights = [
