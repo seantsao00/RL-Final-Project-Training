@@ -10,12 +10,6 @@ sys.set_int_max_str_digits(0)
 
 
 @dataclass
-class AppsSample:
-    question: str
-    tests: list[tuple[str, str]]  # List of (input, expected_output) test cases
-
-
-@dataclass
 class ClassEvalSample:
     task_id: str
     method_name: str
