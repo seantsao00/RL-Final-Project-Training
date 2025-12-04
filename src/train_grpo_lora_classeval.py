@@ -49,7 +49,6 @@ def main(
         return classeval_unittest_reward_function(
             *args,
             syntax_error_penalty=reward_cfg.syntax_error_penalty,
-            test_threads=custom_args.test_threads,
             **kwargs,
         )
 
