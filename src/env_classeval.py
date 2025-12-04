@@ -1,4 +1,5 @@
 import subprocess
+import json
 import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -100,7 +101,6 @@ def evaluate_classeval_candidate(
     )
 
     unittest_code = f"""
-
 import unittest
 
 {sample.method_test_code}
@@ -127,12 +127,11 @@ if __name__ == "__main__":
             stderr=str(e),
         )
 
-    with _temp_code_file(code) as candidate_path:
-        test_file = candidate_path.read_text()
+    with _temp_code_file(full_test_code) as candidate_path:
 
         try:
             result = subprocess.run(
-                ["python", "-m", "unittest", test_file],
+                ["python", candidate_path.as_posix()],
                 capture_output=True,
                 text=True,
                 timeout=timeout_s,
@@ -232,38 +231,58 @@ def evaluate_ruff(
         methods_info=sample.methods_info,
         replaced_method={sample.method_name: code},
     )
-    with _temp_code_file(assembled_code) as candidate_path:
-        n_issues = 0
-        messages: list[str] = []
-        try:
-            result = subprocess.run(
-                [
-                    "ruff",
-                    "check",
-                    "--select=F,W,E,UP,C4,FA,ISC,RET,SIM,TID,TC,PTH,TD,NPY",
-                    "--output-format=json",
-                    candidate_path.as_posix(),
-                ],
-                capture_output=True,
-                text=True,
-                timeout=10.0,
-            )
+    baseline_code = build_full_class_code(
+        class_name=sample.class_name,
+        import_statement=sample.import_statement,
+        class_description="",
+        class_constructor=sample.class_constructor,
+        methods_info=sample.methods_info,
+        replaced_method={},
+    )
 
-            if result.stdout:
-                issues = json.loads(result.stdout)
-                n_issues = len(issues)
-                messages = [issue["message"] for issue in issues]
+    def run_single_ruff_check(code_to_check: str) -> RuffResult:
+        with _temp_code_file(code_to_check) as candidate_path:
+            n_issues = 0
+            messages: list[str] = []
+            try:
+                result = subprocess.run(
+                    [
+                        "ruff",
+                        "check",
+                        "--select=F,W,E,UP,C4,FA,ISC,RET,SIM,TID,TC,PTH,TD,NPY",
+                        "--output-format=json",
+                        candidate_path.as_posix(),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=10.0,
+                )
 
-        except Exception as e:
-            print(f"Ruff error: {e}")
+                if result.stdout:
+                    issues = json.loads(result.stdout)
+                    n_issues = len(issues)
+                    messages = [issue["message"] for issue in issues]
 
-        return RuffResult(n_issues=n_issues, messages=messages)
+            except Exception as e:
+                print(f"Ruff error: {e}")
+
+            return RuffResult(n_issues=n_issues, messages=messages)
+
+    replacement_ruff_result = run_single_ruff_check(assembled_code)
+    baseline_ruff_result = run_single_ruff_check(baseline_code)
+    return RuffResult(
+        n_issues=max(
+            0, replacement_ruff_result.n_issues - baseline_ruff_result.n_issues
+        ),
+        messages=replacement_ruff_result.messages,
+    )
 
 
 def evaluate_mypy(
     code: str,
     sample: ClassEvalSample,
 ) -> MypyResult:
+    # Build code with the candidate replacement
     assembled_code = build_full_class_code(
         class_name=sample.class_name,
         import_statement=sample.import_statement,
@@ -272,32 +291,52 @@ def evaluate_mypy(
         methods_info=sample.methods_info,
         replaced_method={sample.method_name: code},
     )
-    with _temp_code_file(assembled_code) as candidate_path:
-        n_errors = 0
-        messages: list[str] = []
-        try:
-            result = subprocess.run(
-                [
-                    "mypy",
-                    "--strict",
-                    "--no-color-output",
-                    "--no-error-summary",
-                    candidate_path.as_posix(),
-                ],
-                capture_output=True,
-                text=True,
-                timeout=10.0,
-            )
+    # Build baseline code with original methods (no replacement)
+    baseline_code = build_full_class_code(
+        class_name=sample.class_name,
+        import_statement=sample.import_statement,
+        class_description="",
+        class_constructor=sample.class_constructor,
+        methods_info=sample.methods_info,
+        replaced_method={},
+    )
 
-            # Count error lines in output
-            # Mypy outputs errors like "file.py:line: error: message"
-            error_lines = [
-                line for line in result.stdout.splitlines() if ": error:" in line
-            ]
-            n_errors = len(error_lines)
-            messages = error_lines
+    def run_single_mypy_check(code_to_check: str, baseline_code: str) -> MypyResult:
+        with _temp_code_file(code_to_check) as candidate_path:
+            n_errors = 0
+            messages: list[str] = []
+            try:
+                result = subprocess.run(
+                    [
+                        "mypy",
+                        "--strict",
+                        "--no-color-output",
+                        "--no-error-summary",
+                        candidate_path.as_posix(),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=10.0,
+                )
 
-        except Exception as e:
-            print(f"Mypy error: {e}")
+                # Count error lines in output
+                # Mypy outputs errors like "file.py:line: error: message"
+                error_lines = [
+                    line for line in result.stdout.splitlines() if ": error:" in line
+                ]
+                n_errors = len(error_lines)
+                messages = error_lines
 
-        return MypyResult(n_errors=n_errors, messages=messages)
+            except Exception as e:
+                print(f"Mypy error: {e}")
+
+            return MypyResult(n_errors=n_errors, messages=messages)
+            
+    replacement_mypy_result = run_single_mypy_check(assembled_code, baseline_code)
+    baseline_mypy_result = run_single_mypy_check(baseline_code, baseline_code)
+    return MypyResult(
+        n_errors=max(
+            0, replacement_mypy_result.n_errors - baseline_mypy_result.n_errors
+        ),
+        messages=replacement_mypy_result.messages,
+    )
