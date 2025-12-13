@@ -18,7 +18,7 @@ max_completion_length: 1024
 logging_steps: 1
 save_strategy: epoch
 report_to: wandb
-run_name: relative-reward
+run_name: has_ruff_weight
 temperature: 0.7
 beta: 0.0
 
@@ -38,8 +38,8 @@ lora_target_modules: all-linear
 
 # Reward configuration
 tests_weight: 0.5
-ruff_weight: 0.0
-mypy_weight: 0.5
+ruff_weight: 0.5
+mypy_weight: 0.2
 syntax_error_penalty: -1.0
 
 # Custom configurations

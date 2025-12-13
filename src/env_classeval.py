@@ -142,17 +142,6 @@ if __name__ == "__main__":
 
 {unittest_code}
 """
-
-    timestamp = datetime.now().strftime("%m%d_%H%M%S_%f")
-    temp_working_dir = Path("temp_working_dir")
-    temp_working_dir = temp_working_dir / sample.class_name / timestamp
-    temp_working_dir.mkdir(exist_ok=True, parents=True)
-    full_test_code_path = (
-        temp_working_dir / f"{sample.method_name}_full_test_code.py"
-    )
-    with full_test_code_path.open("w") as f:
-        f.write(full_test_code)
-
     try:
         compile(full_test_code, "<string>", "exec")
     except Exception as e:
@@ -165,25 +154,29 @@ if __name__ == "__main__":
             stderr=str(e),
         )
 
-    suite = unittest.TestLoader().discover(
-        start_dir=str(temp_working_dir),
-        pattern=full_test_code_path.name,
-    )
-    result = unittest.TextTestRunner().run(suite)
-    n_total = suite.countTestCases()
+    with _temp_code_file(full_test_code) as candidate_path:
+        res = subprocess.run(
+            [
+                "python",
+                candidate_path.as_posix(),
+            ],
+            capture_output=True,
+            text=True,
+        )
 
-    error_messages = [error[1] for error in result.errors] + [
-        failure[1] for failure in result.failures
-    ]
+        result = res.stderr.splitlines(keepends=False)[0]
+        print(f"Unittest output: {result}")
+        n_total = len(result)
+        n_pass = result.count(".")
 
-    return ClassEvalExecutionResult(
-        n_passed=n_total - len(result.failures) - len(result.errors),
-        n_total=n_total,
-        timed_out=False,
-        runtime_error=False,
-        syntax_error=False,
-        stderr="\n".join(map(str, error_messages)),
-    )
+        return ClassEvalExecutionResult(
+            n_passed=n_pass,
+            n_total=n_total,
+            timed_out=False,
+            runtime_error=False,
+            syntax_error=False,
+            stderr=res.stderr,
+        )
 
 
 def evaluate_ruff(
@@ -205,6 +198,14 @@ def evaluate_ruff(
                 text=True,
                 timeout=10.0,
             )
+
+            if result.stdout:
+                issues = json.loads(result.stdout)
+                n_issues = len(issues)
+                messages = [issue["message"] for issue in issues]
+
+        except Exception as e:
+            print(f"Ruff error: {e}")
 
     def run_single_ruff_check(code_to_check: str) -> RuffResult:
         with _temp_code_file(code_to_check) as candidate_path:
@@ -263,6 +264,17 @@ def evaluate_mypy(
                 text=True,
                 timeout=10.0,
             )
+
+            # Count error lines in output
+            # Mypy outputs errors like "file.py:line: error: message"
+            error_lines = [
+                line for line in result.stdout.splitlines() if ": error:" in line
+            ]
+            n_errors = len(error_lines)
+            messages = error_lines
+
+        except Exception as e:
+            print(f"Mypy error: {e}")
 
     def run_single_mypy_check(code_to_check: str, baseline_code: str) -> MypyResult:
         with _temp_code_file(code_to_check) as candidate_path:
