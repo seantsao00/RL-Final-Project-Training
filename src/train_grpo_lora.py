@@ -16,6 +16,7 @@ from .reward import RewardConfig, create_reward_funcs
 class CustomArguments:
     dataset_train_max_samples: int | None = None
     test_threads: int | None = None
+    dataset_source: str = "apps"
 
 
 def main(
