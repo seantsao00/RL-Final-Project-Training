@@ -21,6 +21,7 @@ from .holisitc_classeval.reward import unit_test_reward_function
 class CustomArguments:
     dataset_train_max_samples: int | None = None
     test_threads: int | None = None
+    train_test_split_ratio: float = 0.8
 
 
 def main(
@@ -32,12 +33,16 @@ def main(
 ):
     set_seed(training_args.seed)
 
-    print(f"Loading dataset: {script_args.dataset_train_split}")
+    print(f"Loading dataset with train/test split ratio: {custom_args.train_test_split_ratio}")
     train_dataset = load_classeval_holistic_dataset_prompt_only(
-        script_args.dataset_train_split, custom_args.dataset_train_max_samples
+        script_args.dataset_train_split, 
+        custom_args.dataset_train_max_samples,
+        custom_args.train_test_split_ratio
     )
     eval_dataset = load_classeval_holistic_dataset_prompt_only(
-        script_args.dataset_test_split, custom_args.dataset_train_max_samples
+        script_args.dataset_test_split, 
+        custom_args.dataset_train_max_samples,
+        custom_args.train_test_split_ratio
     )
 
     training_args.reward_weights = [
@@ -53,17 +58,17 @@ def main(
             test_threads=custom_args.test_threads,
             **kwargs,
         )
-    def wrapped_ruff_reward_function(*args, **kwargs):
-        return ruff_reward_function(
-            *args,
-            ruff_select=reward_cfg.ruff_select,
-            ruff_ignore=reward_cfg.ruff_ignore,
-            **kwargs,
-        )
+    # def wrapped_ruff_reward_function(*args, **kwargs):
+    #     return ruff_reward_function(
+    #         *args,
+    #         ruff_select=reward_cfg.ruff_select,
+    #         ruff_ignore=reward_cfg.ruff_ignore,
+    #         **kwargs,
+    #     )
 
     reward_funcs = [
         wrapped_unit_test_reward_function,
-        wrapped_ruff_reward_function,
+        ruff_reward_function,
         mypy_reward_function,
     ]
 
@@ -93,6 +98,8 @@ def main(
     output_dir.mkdir(parents=True, exist_ok=True)
     trainer.save_model(str(output_dir))
     print(f"Model and tokenizer saved to {output_dir}")
+
+    
 
 
 if __name__ == "__main__":

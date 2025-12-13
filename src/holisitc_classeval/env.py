@@ -8,6 +8,7 @@ import uuid
 import sys
 import shutil
 import os
+from func_timeout import func_set_timeout, FunctionTimedOut
 
 @contextmanager
 def _temp_code_file(code: str):
@@ -41,8 +42,22 @@ class ExecutionResult:
     syntax_error: bool
     stderr: str
 
+@func_set_timeout(5)
+def _run_unit_test(suite):
+    stderr = io.StringIO()
+    runner = unittest.TextTestRunner(verbosity=2, stream=stderr)
+    test_result = runner.run(suite)
+    stderr_output = stderr.getvalue()
+    
 
-def evaluate_unit_tests(code: str) -> ExecutionResult:
+    return test_result, stderr_output
+
+    
+    
+    
+
+def evaluate_unit_tests(code: str, timeout: int = 10) -> ExecutionResult:
+
     with _temp_code_file(code) as candidate_path:
         loader = unittest.TestLoader()
         suite = loader.discover(
@@ -51,7 +66,8 @@ def evaluate_unit_tests(code: str) -> ExecutionResult:
         )
         n_total = suite.countTestCases()
         # print(code, n_total)
-
+        n_passed=0
+        
         try:
             code = candidate_path.read_text()
             compile(code, str(candidate_path), "exec")
@@ -63,15 +79,17 @@ def evaluate_unit_tests(code: str) -> ExecutionResult:
                 stderr=str(e),
             )
         
-        stderr = io.StringIO()
-        runner = unittest.TextTestRunner(verbosity=2, stream=stderr)
-        test_result = runner.run(suite)
-
-        failures = len(test_result.failures)
-        errors = len(test_result.errors)
-
-        n_passed = n_total - failures - errors
-        stderr_output = stderr.getvalue()
+        stderr_output = ""
+        try:
+            test_result, stderr_output = _run_unit_test(suite)
+            failures = len(test_result.failures)
+            errors = len(test_result.errors)
+            n_passed = n_total - failures - errors
+        except FunctionTimedOut as e:
+            stderr_output = f"Test execution timed out: {e}"
+        except Exception as e:
+            stderr_output = f"Test execution error: {e}"
+            
 
         return ExecutionResult(
             n_passed=n_passed,

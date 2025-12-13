@@ -39,9 +39,26 @@ lora_target_modules: all-linear
 
 # Reward configuration
 tests_weight: 0.5
-ruff_weight: 0.0
+ruff_weight: 0.5
 mypy_weight: 0.5
 syntax_error_penalty: -1.0
 
 # Custom configurations
 seed: 42
+
+ruff_select:
+  - F
+  - W
+  - E
+  - UP
+  - C4
+  - FA
+  - ISC
+  - RET
+  - SIM
+  - TID
+  - TC
+  - PTH
+  - TD
+  - NPY
+ruff_ignore: []

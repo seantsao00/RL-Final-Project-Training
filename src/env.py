@@ -126,7 +126,7 @@ def evaluate_unit_tests(
         )
 
 
-def evaluate_ruff(code: str, select: list[str], ignore: list[str]) -> RuffResult:
+def evaluate_ruff(code: str) -> RuffResult:
     with _temp_code_file(code) as candidate_path:
         n_issues = 0
         messages: list[str] = []

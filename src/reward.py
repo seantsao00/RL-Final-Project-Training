@@ -10,8 +10,6 @@ class RewardConfig:
     ruff_weight: float
     mypy_weight: float
     syntax_error_penalty: float
-    ruff_select: list[str]
-    ruff_ignore: list[str]
 
 
 def _extract_code(completion: str) -> str:
@@ -27,6 +25,7 @@ def unit_test_reward_function(
     test_threads: int | None = None,
     **kwargs,
 ) -> list[float]:
+    
     solutions = [_extract_code(comp[0]["content"]) for comp in completions]
     # Assume that a field "tests" exists in dataset samples
     tests: list[list[tuple[str, str]]] = kwargs["tests"]
@@ -42,11 +41,11 @@ def unit_test_reward_function(
 
         if i == 0:
             print("Unit Test Reward Debug Info:")
-            for prompt in prompts[0]:
-                print(f"{prompt['role']}:\n{prompt['content']}\n")
-            print("================================")
-            for completion in completions[0]:
-                print(f"{completion['role']}:\n{completion['content']}\n")
+            # for prompt in prompts[0]:
+            #     print(f"{prompt['role']}:\n{prompt['content']}\n")
+            # print("================================")
+            # for completion in completions[0]:
+            #     print(f"{completion['role']}:\n{completion['content']}\n")
             print("================================")
             print(f"Tests result: {result}")
             print(f"Calculated reward: {reward}")
@@ -58,15 +57,13 @@ def unit_test_reward_function(
 def ruff_reward_function(
     prompts: list[list[dict[str, str]]],
     completions: list[list[dict[str, str]]],
-    ruff_select: list[str],
-    ruff_ignore: list[str],
     **kwargs,
 ) -> list[float]:
     solutions = [_extract_code(comp[0]["content"]) for comp in completions]
 
     rewards: list[float] = []
     for i, solution in enumerate(solutions):
-        result = evaluate_ruff(solution, select=ruff_select, ignore=ruff_ignore)
+        result = evaluate_ruff(solution)
         reward = 1 / (1.0 + result.n_issues)
         rewards.append(reward)
 
