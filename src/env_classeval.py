@@ -207,7 +207,42 @@ def evaluate_ruff(
         except Exception as e:
             print(f"Ruff error: {e}")
 
-        return RuffResult(n_issues=n_issues, messages=messages)
+    def run_single_ruff_check(code_to_check: str) -> RuffResult:
+        with _temp_code_file(code_to_check) as candidate_path:
+            n_issues = 0
+            messages: list[str] = []
+            try:
+                result = subprocess.run(
+                    [
+                        "ruff",
+                        "check",
+                        "--select=F,W,E,UP,C4,FA,ISC,RET,SIM,TID,TC,PTH,TD,NPY",
+                        "--output-format=json",
+                        candidate_path.as_posix(),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=10.0,
+                )
+
+                if result.stdout:
+                    issues = json.loads(result.stdout)
+                    n_issues = len(issues)
+                    messages = [issue["message"] for issue in issues]
+
+            except Exception as e:
+                print(f"Ruff error: {e}")
+
+            return RuffResult(n_issues=n_issues, messages=messages)
+
+    replacement_ruff_result = run_single_ruff_check(assembled_code)
+    baseline_ruff_result = run_single_ruff_check(baseline_code)
+    return RuffResult(
+        n_issues=max(
+            0, replacement_ruff_result.n_issues - baseline_ruff_result.n_issues
+        ),
+        messages=replacement_ruff_result.messages,
+    )
 
 
 def evaluate_mypy(
@@ -241,4 +276,42 @@ def evaluate_mypy(
         except Exception as e:
             print(f"Mypy error: {e}")
 
-        return MypyResult(n_errors=n_errors, messages=messages)
+    def run_single_mypy_check(code_to_check: str, baseline_code: str) -> MypyResult:
+        with _temp_code_file(code_to_check) as candidate_path:
+            n_errors = 0
+            messages: list[str] = []
+            try:
+                result = subprocess.run(
+                    [
+                        "mypy",
+                        "--strict",
+                        "--no-color-output",
+                        "--no-error-summary",
+                        candidate_path.as_posix(),
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=10.0,
+                )
+
+                # Count error lines in output
+                # Mypy outputs errors like "file.py:line: error: message"
+                error_lines = [
+                    line for line in result.stdout.splitlines() if ": error:" in line
+                ]
+                n_errors = len(error_lines)
+                messages = error_lines
+
+            except Exception as e:
+                print(f"Mypy error: {e}")
+
+            return MypyResult(n_errors=n_errors, messages=messages)
+            
+    replacement_mypy_result = run_single_mypy_check(assembled_code, baseline_code)
+    baseline_mypy_result = run_single_mypy_check(baseline_code, baseline_code)
+    return MypyResult(
+        n_errors=max(
+            0, replacement_mypy_result.n_errors - baseline_mypy_result.n_errors
+        ),
+        messages=replacement_mypy_result.messages,
+    )
