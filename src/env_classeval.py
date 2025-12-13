@@ -1,8 +1,13 @@
 import subprocess
+import json
 import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+import unittest
+import importlib
+import importlib.util
+from datetime import datetime
 
 from .env import RuffResult, MypyResult
 from .data import ClassEvalSample
@@ -26,6 +31,29 @@ class ClassEvalExecutionResult:
     runtime_error: bool
     syntax_error: bool
     stderr: str
+
+
+def add_timeout_to_unittest_code(test_code: str, timeout_s: float = 2.0) -> str:
+    """
+    Wrap the unittest code to add a timeout with timeout_decorator to each test case.
+
+    Args:
+        test_code: The original unittest code as a string
+        timeout_s: Timeout in seconds for each test
+
+    Returns:
+        Modified unittest code with timeouts
+    """
+    lines = test_code.split("\n")
+    modified_lines = ["import timeout_decorator"]
+
+    for line in lines:
+        stripped_line = line.strip()
+        if stripped_line.startswith("def test_"):
+            indent = line[: line.index("def")]
+            modified_lines.append(f"{indent}@timeout_decorator.timeout({timeout_s})")
+        modified_lines.append(line)
+    return "\n".join(modified_lines)
 
 
 def build_full_class_code(
@@ -100,7 +128,6 @@ def evaluate_classeval_candidate(
     )
 
     unittest_code = f"""
-
 import unittest
 
 {sample.method_test_code}
@@ -108,12 +135,23 @@ import unittest
 if __name__ == "__main__":
     unittest.main()
 """
+    unittest_code = add_timeout_to_unittest_code(unittest_code)
 
     full_test_code = f"""
 {assembled_code}
 
 {unittest_code}
 """
+
+    timestamp = datetime.now().strftime("%m%d_%H%M%S_%f")
+    temp_working_dir = Path("temp_working_dir")
+    temp_working_dir = temp_working_dir / sample.class_name / timestamp
+    temp_working_dir.mkdir(exist_ok=True, parents=True)
+    full_test_code_path = (
+        temp_working_dir / f"{sample.method_name}_full_test_code.py"
+    )
+    with full_test_code_path.open("w") as f:
+        f.write(full_test_code)
 
     try:
         compile(full_test_code, "<string>", "exec")
@@ -127,111 +165,30 @@ if __name__ == "__main__":
             stderr=str(e),
         )
 
-    with _temp_code_file(code) as candidate_path:
-        test_file = candidate_path.read_text()
+    suite = unittest.TestLoader().discover(
+        start_dir=str(temp_working_dir),
+        pattern=full_test_code_path.name,
+    )
+    result = unittest.TextTestRunner().run(suite)
+    n_total = suite.countTestCases()
 
-        try:
-            result = subprocess.run(
-                ["python", "-m", "unittest", test_file],
-                capture_output=True,
-                text=True,
-                timeout=timeout_s,
-            )
+    error_messages = [error[1] for error in result.errors] + [
+        failure[1] for failure in result.failures
+    ]
 
-            stderr = result.stderr
-            stdout = result.stdout
-
-            # Parse unittest output to count tests
-            # unittest outputs like "Ran X tests" or similar
-            n_total = 0
-            n_passed = 0
-
-            # Try to parse from stderr (unittest outputs to stderr by default)
-            output = stderr + stdout
-
-            if "Ran" in output:
-                for line in output.split("\n"):
-                    if line.startswith("Ran "):
-                        # Extract number from "Ran X test(s)"
-                        parts = line.split()
-                        if len(parts) >= 2 and parts[1].isdigit():
-                            n_total = int(parts[1])
-                        break
-
-            # Check if all tests passed
-            if result.returncode == 0:
-                n_passed = n_total
-            else:
-                # Parse failures/errors
-                if "FAILED" in output:
-                    # Look for patterns like "failures=X, errors=Y"
-                    failures = 0
-                    errors = 0
-                    for line in output.split("\n"):
-                        if "failures=" in line.lower():
-                            try:
-                                failures = int(
-                                    line.split("failures=")[1]
-                                    .split(",")[0]
-                                    .split(")")[0]
-                                    .strip()
-                                )
-                            except:
-                                pass
-                        if "errors=" in line.lower():
-                            try:
-                                errors = int(
-                                    line.split("errors=")[1]
-                                    .split(",")[0]
-                                    .split(")")[0]
-                                    .strip()
-                                )
-                            except:
-                                pass
-
-                    n_passed = max(0, n_total - failures - errors)
-
-            return ClassEvalExecutionResult(
-                n_passed=n_passed,
-                n_total=n_total,
-                timed_out=False,
-                runtime_error=result.returncode != 0 and "Error" in output,
-                syntax_error=False,
-                stderr=stderr,
-            )
-
-        except subprocess.TimeoutExpired:
-            return ClassEvalExecutionResult(
-                n_passed=0,
-                n_total=0,
-                timed_out=True,
-                runtime_error=False,
-                syntax_error=False,
-                stderr="Test execution timed out",
-            )
-        except Exception as e:
-            return ClassEvalExecutionResult(
-                n_passed=0,
-                n_total=0,
-                timed_out=False,
-                runtime_error=True,
-                syntax_error=False,
-                stderr=str(e),
-            )
+    return ClassEvalExecutionResult(
+        n_passed=n_total - len(result.failures) - len(result.errors),
+        n_total=n_total,
+        timed_out=False,
+        runtime_error=False,
+        syntax_error=False,
+        stderr="\n".join(map(str, error_messages)),
+    )
 
 
 def evaluate_ruff(
-    code: str,
-    sample: ClassEvalSample,
+    assembled_code: str,
 ) -> RuffResult:
-    assembled_code = build_full_class_code(
-        class_name=sample.class_name,
-        import_statement=sample.import_statement,
-        class_description="",
-        class_constructor=sample.class_constructor,
-        methods_info=sample.methods_info,
-        replaced_method={sample.method_name: code},
-    )
     with _temp_code_file(assembled_code) as candidate_path:
         n_issues = 0
         messages: list[str] = []
@@ -261,17 +218,8 @@ def evaluate_ruff(
 
 
 def evaluate_mypy(
-    code: str,
-    sample: ClassEvalSample,
+    assembled_code: str,
 ) -> MypyResult:
-    assembled_code = build_full_class_code(
-        class_name=sample.class_name,
-        import_statement=sample.import_statement,
-        class_description="",
-        class_constructor=sample.class_constructor,
-        methods_info=sample.methods_info,
-        replaced_method={sample.method_name: code},
-    )
     with _temp_code_file(assembled_code) as candidate_path:
         n_errors = 0
         messages: list[str] = []

@@ -38,6 +38,9 @@ def main(
     eval_dataset = load_classeval_dataset_prompt_only(
         custom_args.dataset_train_split_end, 100
     )
+    
+    print("train_dataset size:", len(train_dataset))
+    print("eval_dataset size:", len(eval_dataset))
 
     training_args.reward_weights = [
         reward_cfg.tests_weight,
@@ -49,7 +52,6 @@ def main(
         return classeval_unittest_reward_function(
             *args,
             syntax_error_penalty=reward_cfg.syntax_error_penalty,
-            test_threads=custom_args.test_threads,
             **kwargs,
         )
 

@@ -76,6 +76,7 @@ def load_classeval_dataset_prompt_only(
         )["train"]
 
     compositional_rows = []
+    dataset = dataset.select(range(start, end if end != -1 else len(dataset)))
 
     for class_data in dataset:
         task_id = class_data["task_id"]
@@ -111,10 +112,6 @@ def load_classeval_dataset_prompt_only(
             compositional_rows.append(row)
 
     dataset = Dataset.from_list(compositional_rows)
-
-    if end < 0:
-        end = len(dataset) + end + 1
-    dataset = dataset.select(range(start, end))
 
     return dataset
 
@@ -202,3 +199,4 @@ def build_tests(input_output: str) -> list[tuple[str, str]]:
         return tests
     except (AssertionError, KeyError, json.JSONDecodeError):
         return []
+
