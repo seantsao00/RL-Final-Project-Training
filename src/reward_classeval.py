@@ -7,6 +7,7 @@ from .env_classeval import (
     evaluate_classeval_candidate,
 )
 from .data import ClassEvalSample
+from .env_classeval import build_full_class_code
 
 
 @dataclass
@@ -19,8 +20,17 @@ class RewardConfig:
 
 def _extract_code(completion: str) -> str:
     """Extract code from markdown code block if present."""
-    match = re.search(r"```python(.*?)```", completion, re.DOTALL)
-    return match.group(1).strip() if match else completion
+    pattern_list = [r"```python(.*?)```", r"```ruby(.*?)```", r"```scss(.*?)```",
+                    r"```python(.*?)", r"```(.*?)```", r"\[PYTHON\](.*?)\[/PYTHON\]"]
+    # match = re.search(r"```python(.*?)```", completion, re.DOTALL)
+    # return match.group(1).strip() if match else completion
+    for pattern in pattern_list:
+        try:
+            code = re.findall(pattern, completion, re.S)[0]
+            return code
+        except:
+            continue
+    return completion
 
 def classeval_unittest_reward_function(
     prompts: list[list[dict[str, str]]],
@@ -63,14 +73,14 @@ def classeval_unittest_reward_function(
 
         if i == 0:
             print("Classeval Unit Test Reward Debug Info:")
-            for prompt in prompts[0]:
-                print(f"{prompt['role']}:\n{prompt['content']}\n")
-            print("================================")
-            for completion in completions[0]:
-                print(f"{completion['role']}:\n{completion['content']}\n")
-            print("================================")
-            print(f"Tests result: {result}")
-            print(f"Calculated reward: {reward}")
+            # for prompt in prompts[0]:
+            #     print(f"{prompt['role']}:\n{prompt['content']}\n")
+            # print("================================")
+            # for completion in completions[0]:
+            #     print(f"{completion['role']}:\n{completion['content']}\n")
+            # print("================================")
+        print(f"Tests result: {result}")
+        print(f"Calculated reward: {reward}")
 
     return rewards
 
@@ -95,8 +105,25 @@ def ruff_reward_function(
             class_constructor=kwargs["class_constructor"][i],
             methods_info=kwargs["methods_info"][i],
         )
-        result = evaluate_ruff(solution, sample)
-        reward = 1 / (1.0 + result.n_issues)
+        assembled_code = build_full_class_code(
+            class_name=sample.class_name,
+            import_statement=sample.import_statement,
+            class_description="",
+            class_constructor=sample.class_constructor,
+            methods_info=sample.methods_info,
+            replaced_method={sample.method_name: solution},
+        )
+        base_code = build_full_class_code(
+            class_name=sample.class_name,
+            import_statement=sample.import_statement,
+            class_description="",
+            class_constructor=sample.class_constructor,
+            methods_info=sample.methods_info,
+            replaced_method={sample.method_name: f"    def {sample.method_name}(self):\n        pass\n"},
+        )
+        result = evaluate_ruff(assembled_code)
+        base_result = evaluate_ruff(base_code)
+        reward = 1 / (1.0 + max(result.n_issues - base_result.n_issues, 0))
         rewards.append(reward)
 
         if i == 0:
@@ -126,8 +153,25 @@ def mypy_reward_function(
             class_constructor=kwargs["class_constructor"][i],
             methods_info=kwargs["methods_info"][i],
         )
-        result = evaluate_mypy(solution, sample)
-        reward = 1 / (1.0 + result.n_errors)
+        assembled_code = build_full_class_code(
+            class_name=sample.class_name,
+            import_statement=sample.import_statement,
+            class_description="",
+            class_constructor=sample.class_constructor,
+            methods_info=sample.methods_info,
+            replaced_method={sample.method_name: solution},
+        )
+        base_code = build_full_class_code(
+            class_name=sample.class_name,
+            import_statement=sample.import_statement,
+            class_description="",
+            class_constructor=sample.class_constructor,
+            methods_info=sample.methods_info,
+            replaced_method={sample.method_name: f"    def {sample.method_name}(self):\n        pass\n"},
+        )
+        result = evaluate_mypy(assembled_code)
+        base_result = evaluate_mypy(base_code)
+        reward = 1 / (1.0 + max(result.n_errors - base_result.n_errors, 0))
         rewards.append(reward)
 
         if i == 0:
