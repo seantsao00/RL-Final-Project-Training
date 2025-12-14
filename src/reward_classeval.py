@@ -12,8 +12,8 @@ from .env_classeval import build_full_class_code
 
 @dataclass
 class RewardConfig:
-    tests_weight: float = 1.0
-    ruff_weight: float = 0.2
+    tests_weight: float = 0.4
+    ruff_weight: float = 0.4
     mypy_weight: float = 0.2
     syntax_error_penalty: float = -1.0
 
@@ -137,6 +137,7 @@ def ruff_reward_function(
 def mypy_reward_function(
     prompts: list[list[dict[str, str]]],
     completions: list[list[dict[str, str]]],
+    syntax_error_penalty: float,
     **kwargs,
 ) -> list[float]:
     solutions = [_extract_code(comp[0]["content"]) for comp in completions]
@@ -161,17 +162,20 @@ def mypy_reward_function(
             methods_info=sample.methods_info,
             replaced_method={sample.method_name: solution},
         )
-        base_code = build_full_class_code(
-            class_name=sample.class_name,
-            import_statement=sample.import_statement,
-            class_description="",
-            class_constructor=sample.class_constructor,
-            methods_info=sample.methods_info,
-            replaced_method={sample.method_name: f"    def {sample.method_name}(self):\n        pass\n"},
-        )
-        result = evaluate_mypy(assembled_code)
-        base_result = evaluate_mypy(base_code)
-        reward = 1 / (1.0 + max(result.n_errors - base_result.n_errors, 0))
+        if result.syntax_error:
+            reward = syntax_error_penalty
+        else:
+            base_code = build_full_class_code(
+                class_name=sample.class_name,
+                import_statement=sample.import_statement,
+                class_description="",
+                class_constructor=sample.class_constructor,
+                methods_info=sample.methods_info,
+                replaced_method={sample.method_name: f"    def {sample.method_name}(self):\n        pass\n"},
+            )
+            result = evaluate_mypy(assembled_code)
+            base_result = evaluate_mypy(base_code)
+            reward = 1 / (1.0 + max(result.n_errors - base_result.n_errors, 0))
         rewards.append(reward)
 
         if i == 0:
