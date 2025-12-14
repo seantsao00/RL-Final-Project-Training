@@ -30,6 +30,14 @@ class ClassEvalExecutionResult:
     stderr: str
 
 
+def _check_syntax_error(code: str) -> SyntaxError | None:
+    try:
+        compile(code, "<string>", "exec")
+        return None
+    except SyntaxError as e:
+        return e
+
+
 def add_timeout_to_unittest_code(test_code: str, timeout_s: float = 2.0) -> str:
     """
     Wrap the unittest code to add a timeout with timeout_decorator to each test case.
@@ -111,16 +119,15 @@ def build_full_class_code(
 
 
 def run_unittest(full_test_code: str) -> ClassEvalExecutionResult:
-    try:
-        compile(full_test_code, "<string>", "exec")
-    except Exception as e:
+    syntax_err = _check_syntax_error(full_test_code)
+    if syntax_err:
         return ClassEvalExecutionResult(
             n_passed=0,
             n_total=0,
             timed_out=False,
             runtime_error=False,
             syntax_error=True,
-            stderr=str(e),
+            stderr=str(syntax_err),
         )
 
     with _temp_code_file(full_test_code) as candidate_path:
@@ -136,7 +143,7 @@ def run_unittest(full_test_code: str) -> ClassEvalExecutionResult:
 
         result = res.stderr.splitlines(keepends=False)[0]
         print(f"Unittest output: {result}")
-        pruned_result = re.match(r'[.FE]*', result).group()
+        pruned_result = re.match(r"[.FE]*", result).group()
         if pruned_result != result:
             print("pruned_result:", pruned_result)
             result = pruned_result
@@ -186,8 +193,12 @@ if __name__ == "__main__":
 
 
 def evaluate_ruff(
-    assembled_code: str,
+    assembled_code: str, select: list[str], ignore: list[str]
 ) -> RuffResult:
+    syntax_err = _check_syntax_error(assembled_code)
+    if syntax_err:
+        return RuffResult(0, [str(syntax_err)], True)
+
     with _temp_code_file(assembled_code) as candidate_path:
         n_issues = 0
         messages: list[str] = []
@@ -196,7 +207,8 @@ def evaluate_ruff(
                 [
                     "ruff",
                     "check",
-                    "--select=F,W,E,UP,C4,FA,ISC,RET,SIM,TID,TC,PTH,TD,NPY",
+                    "--select=" + ",".join(select),
+                    "--ignore=" + ",".join(ignore),
                     "--output-format=json",
                     candidate_path.as_posix(),
                 ],
@@ -219,10 +231,9 @@ def evaluate_ruff(
 def evaluate_mypy(
     assembled_code: str,
 ) -> MypyResult:
-    try:
-        compile(assembled_code, "<string>", "exec")
-    except Exception as e:
-        return MypyResult(n_errors=0, messages=[str(e)], syntax_error=True)
+    syntax_err = _check_syntax_error(assembled_code)
+    if syntax_err:
+        return MypyResult(0, [str(syntax_err)], syntax_error=True)
 
     with _temp_code_file(assembled_code) as candidate_path:
         n_errors = 0
