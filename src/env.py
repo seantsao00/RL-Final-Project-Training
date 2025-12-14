@@ -135,8 +135,7 @@ def evaluate_ruff(code: str) -> RuffResult:
                 [
                     "ruff",
                     "check",
-                    "--select=" + ",".join(select),
-                    "--ignore=" + ",".join(ignore),
+                    "--select=F,W,E,UP,C4,FA,ISC,RET,SIM,TID,TC,PTH,TD,NPY",
                     "--output-format=json",
                     candidate_path.as_posix(),
                 ],
