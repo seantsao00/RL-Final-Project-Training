@@ -148,7 +148,7 @@ def ruff_reward_function(
                 },
             )
             base_result = evaluate_ruff(base_code, ruff_select, ruff_ignore)
-        reward = 1 / (1.0 + max(result.n_issues - base_result.n_issues, 0))
+            reward = 1 / (1.0 + max(result.n_issues - base_result.n_issues, 0))
         rewards.append(reward)
 
         if i == 0:
