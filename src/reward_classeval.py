@@ -18,10 +18,10 @@ from .env_classeval import (
 
 @dataclass
 class RewardConfig:
-    tests_weight: float = 0.4
-    ruff_weight: float = 0.4
-    mypy_weight: float = 0.2
-    syntax_error_penalty: float = -1.0
+    tests_weight: float
+    ruff_weight: float
+    mypy_weight: float
+    syntax_error_penalty: float
     ruff_select: list[str]
     ruff_ignore: list[str]
 
@@ -106,6 +106,8 @@ def ruff_reward_function(
     prompts: list[list[dict[str, str]]],
     completions: list[list[dict[str, str]]],
     syntax_error_penalty: float,
+    ruff_select: list[str],
+    ruff_ignore: list[str],
     **kwargs,
 ) -> list[float]:
     solutions = [_extract_code(comp[0]["content"]) for comp in completions]
@@ -131,7 +133,7 @@ def ruff_reward_function(
             methods_info=sample.methods_info,
             replaced_method={sample.method_name: solution},
         )
-        result: RuffResult = evaluate_ruff(assembled_code)
+        result: RuffResult = evaluate_ruff(assembled_code, ruff_select, ruff_ignore)
         if result.syntax_error:
             reward = syntax_error_penalty
         else:
@@ -145,7 +147,7 @@ def ruff_reward_function(
                     sample.method_name: f"    def {sample.method_name}(self):\n        pass\n"
                 },
             )
-            base_result = evaluate_ruff(base_code)
+            base_result = evaluate_ruff(base_code, ruff_select, ruff_ignore)
         reward = 1 / (1.0 + max(result.n_issues - base_result.n_issues, 0))
         rewards.append(reward)
 

@@ -46,7 +46,7 @@ def main(
         reward_cfg.mypy_weight,
     ]
 
-    reward_funcs = create_reward_funcs(reward_cfg, custom_args.test_threads)
+    reward_funcs = create_reward_funcs(reward_cfg)
 
     if model_args.model_name_or_path is None:
         raise ValueError("Model name or path must be specified in model_args.")
