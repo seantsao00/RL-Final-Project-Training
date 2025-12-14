@@ -1,6 +1,4 @@
 import re
-import tempfile
-from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,21 +20,31 @@ from .evaluate import run_evaluation_and_save
 class CustomArguments:
     dataset_train_split_end: int | None = None
 
+
 @dataclass
 class EvalArguments:
     data_path: str = (
-        Path(__file__).resolve().parents[2] / "ClassEval" / "data" / "ClassEval_data.json"
+        Path(__file__).resolve().parents[2]
+        / "ClassEval"
+        / "data"
+        / "ClassEval_data.json"
     ).as_posix()
     greedy: int = 1
-    output_path: str = "gen_result"
+    eval_output_dir: str = "classeval_eval/results/eval_result"
     lora_weights: str | None = None
     test_work: bool = False
 
 
 def _extract_code(completion: str) -> str:
     """Extract code from markdown code block if present."""
-    pattern_list = [r"```python(.*?)```", r"```ruby(.*?)```", r"```scss(.*?)```",
-                    r"```python(.*?)", r"```(.*?)```", r"\[PYTHON\](.*?)\[/PYTHON\]"]
+    pattern_list = [
+        r"```python(.*?)```",
+        r"```ruby(.*?)```",
+        r"```scss(.*?)```",
+        r"```python(.*?)",
+        r"```(.*?)```",
+        r"\[PYTHON\](.*?)\[/PYTHON\]",
+    ]
     for pattern in pattern_list:
         try:
             code = re.findall(pattern, completion, re.S)[0]
@@ -54,14 +62,18 @@ def main(
     custom_args: CustomArguments,
     eval_args: EvalArguments,
 ):
-    output_path = Path(eval_args.output_path)
+    eval_output_dir = Path(eval_args.eval_output_dir)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     set_seed(training_args.seed)
+    eval_start = 99 if eval_args.test_work else custom_args.dataset_train_split_end
     eval_dataset = load_classeval_dataset_prompt_only(
-        custom_args.dataset_train_split_end, 100
+        eval_start, 100
     )
+    if eval_args.test_work:
+        print("This is a test run. Only test on 1 class sample.")
+    print("eval_dataset size:", len(eval_dataset))
     tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path)
     tokenizer.padding_side = "left"
 
@@ -76,6 +88,10 @@ def main(
         if not lora_path.exists():
             raise FileNotFoundError(f"LoRA weights path '{lora_path}' does not exist.")
         model = PeftModel.from_pretrained(model, str(lora_path))
+    else:
+        print("\033[33m[Warning]\033[0m No LoRA adapter provided (eval_args.lora_weights is None).\n"
+              "Using the base model only. If you intended to evaluate a fine-tuned adapter, "
+              "pass --eval_arguments.lora_weights or configure EvalArguments.lora_weights.")
 
     model.eval()
 
@@ -126,8 +142,8 @@ def main(
             replaced_method=methods,
         )
 
-    output_path.mkdir(parents=True, exist_ok=True)
-    code_dir = output_path / "composed_code"
+    eval_output_dir.mkdir(parents=True, exist_ok=True)
+    code_dir = eval_output_dir / "composed_code"
     code_dir.mkdir(parents=True, exist_ok=True)
 
     for class_name, class_code in tqdm(
@@ -139,26 +155,27 @@ def main(
         with class_file.open("w", encoding="utf-8") as f:
             f.write(class_code)
 
-    summary_file = output_path / "results_summary.json"
+    summary_file = eval_output_dir / "results_summary.json"
     results_summary = run_evaluation_and_save(
         composed_classes=compositional_result,
         code_metadata=code_metadata,
         code_dir=code_dir,
         summary_file=summary_file,
     )
-
-    # Compute and print passrate to stdout
-    total = len(results_summary)
-    passed = sum(1 for r in results_summary if r["n_passed"] == r["n_total"])
-
-    passrate = (passed / total * 100.0) if total > 0 else 0.0
-    print(f"Saved composed class code to {code_dir} and test summary to {summary_file}")
-    print(f"Passrate: {passed}/{total} ({passrate:.2f}%)")
+    # Message moved to evaluate.py; still confirm code and summary locations
+    print(f"Saved composed class code to {code_dir}")
 
 
 if __name__ == "__main__":
     parser = TrlParser(
-        (ScriptArguments, GRPOConfig, ModelConfig, RewardConfig, CustomArguments, EvalArguments)
+        (
+            ScriptArguments,
+            GRPOConfig,
+            ModelConfig,
+            RewardConfig,
+            CustomArguments,
+            EvalArguments,
+        )
     )
     script_args, training_args, model_args, reward_cfg, custom_args, eval_args = (
         parser.parse_args_and_config()
