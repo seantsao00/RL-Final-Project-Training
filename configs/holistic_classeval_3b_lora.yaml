@@ -41,7 +41,7 @@ lora_target_modules: all-linear
 # Reward configuration
 tests_weight: 1
 ruff_weight: 0.5
-mypy_weight: 0.5
+mypy_weight: 1.5
 syntax_error_penalty: -1.0
 
 # Custom configurations

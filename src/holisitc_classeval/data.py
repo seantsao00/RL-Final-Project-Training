@@ -4,7 +4,7 @@ from datasets import Dataset, load_dataset
 def get_system_prompt() -> str:
     return """You are Qwen, created by Alibaba Cloud. You are a helpful assistant.
 You will be given a class and the skeleton of methods. Your task is to finish the implementation of the class and its methods.
-Your output must be only Python code, no explanations, no comments, no markdown.
+Your output must be only Python code (using type annotation), no explanations, no comments, no markdown.
 """
 
 def get_user_prompt(class_name: str, skeleton: str) -> str:
