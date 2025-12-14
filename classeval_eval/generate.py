@@ -5,7 +5,7 @@ from pathlib import Path
 import torch
 from peft import PeftModel
 from src.data import load_classeval_dataset_prompt_only
-from src.env_classeval import build_full_class_code
+from src.env_classeval import build_full_class_code, add_timeout_to_unittest_code
 from src.reward_classeval import RewardConfig
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed, GenerationConfig
@@ -148,6 +148,7 @@ def main(
     code_dir = eval_output_dir / "composed_code"
     code_dir.mkdir(parents=True, exist_ok=True)
 
+    composed_files: list[Path] = []
     for class_name, class_code in tqdm(
         compositional_result.items(), desc="Writing composed class files"
     ):
@@ -156,12 +157,35 @@ def main(
         class_file = cls_dir / f"{class_name}.py"
         with class_file.open("w", encoding="utf-8") as f:
             f.write(class_code)
+        composed_files.append(class_file)
+
+    # Build full_test_code files per class here
+    test_files: list[Path] = []
+    for class_name, class_code in compositional_result.items():
+        unittest_code = code_metadata[class_name]["class_test_code"]
+        unittest_code = add_timeout_to_unittest_code(unittest_code)
+        full_test_code = f"""
+{class_code}
+
+{unittest_code}
+"""
+        if "unittest.main()" not in full_test_code:
+            full_test_code += """
+
+if __name__ == "__main__":
+    unittest.main()
+"""
+
+        full_test_file = code_dir / class_name / f"full_test_{class_name}.py"
+        full_test_file.parent.mkdir(parents=True, exist_ok=True)
+        with full_test_file.open("w", encoding="utf-8") as f:
+            f.write(full_test_code)
+        test_files.append(full_test_file)
 
     summary_file = eval_output_dir / "results_summary.json"
     results_summary = run_evaluation_and_save(
-        composed_classes=compositional_result,
-        code_metadata=code_metadata,
-        code_dir=code_dir,
+        test_files=test_files,
+        composed_files=composed_files,
         summary_file=summary_file,
     )
     # Message moved to evaluate.py; still confirm code and summary locations
