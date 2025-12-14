@@ -41,9 +41,7 @@ if __name__ == "__main__":
         with full_test_file.open("w", encoding="utf-8") as f:
             f.write(full_test_code)
 
-        result: ClassEvalExecutionResult = run_unittest(
-            full_test_code_path=full_test_file, timeout_s=10.0
-        )
+        result: ClassEvalExecutionResult = run_unittest(full_test_file)
 
         test_status: Dict[str, Any] = {
             "class_name": class_name,
@@ -61,8 +59,27 @@ if __name__ == "__main__":
 
         results_summary.append(test_status)
 
+    total = len(results_summary)
+    passed = sum(1 for r in results_summary if r["n_passed"] == r["n_total"])
+    passrate = (passed / total * 100.0) if total > 0 else 0.0
+    
+    print("total passrate:", passrate)
+
+    summary_payload = {
+        "overall": {
+            "passed": passed,
+            "total": total,
+            "passrate": passrate,
+        },
+        "results": results_summary,
+    }
+
     summary_file.parent.mkdir(parents=True, exist_ok=True)
     with summary_file.open("w", encoding="utf-8") as f:
-        json.dump(results_summary, f, ensure_ascii=False, indent=2)
+        json.dump(summary_payload, f, ensure_ascii=False, indent=2)
+
+    print(
+        f"Saved test summary to {summary_file} | Passrate: {passed}/{total} ({passrate:.2f}%)"
+    )
 
     return results_summary
