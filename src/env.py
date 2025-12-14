@@ -53,7 +53,7 @@ class RuffResult:
 class MypyResult:
     n_errors: int
     messages: list[str]
-    syntax_error: bool
+    syntax_error: bool = False
 
 
 def _run_single_test(

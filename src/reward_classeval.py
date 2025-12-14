@@ -1,5 +1,6 @@
 import re
 from dataclasses import dataclass
+from functools import partial, update_wrapper
 
 from .env_classeval import (
     evaluate_mypy,
@@ -7,7 +8,12 @@ from .env_classeval import (
     evaluate_classeval_candidate,
 )
 from .data import ClassEvalSample
-from .env_classeval import build_full_class_code
+from .env_classeval import (
+    build_full_class_code,
+    ClassEvalExecutionResult,
+    MypyResult,
+    RuffResult,
+)
 
 
 @dataclass
@@ -16,12 +22,20 @@ class RewardConfig:
     ruff_weight: float = 0.4
     mypy_weight: float = 0.2
     syntax_error_penalty: float = -1.0
+    ruff_select: list[str]
+    ruff_ignore: list[str]
 
 
 def _extract_code(completion: str) -> str:
     """Extract code from markdown code block if present."""
-    pattern_list = [r"```python(.*?)```", r"```ruby(.*?)```", r"```scss(.*?)```",
-                    r"```python(.*?)", r"```(.*?)```", r"\[PYTHON\](.*?)\[/PYTHON\]"]
+    pattern_list = [
+        r"```python(.*?)```",
+        r"```ruby(.*?)```",
+        r"```scss(.*?)```",
+        r"```python(.*?)",
+        r"```(.*?)```",
+        r"\[PYTHON\](.*?)\[/PYTHON\]",
+    ]
     # match = re.search(r"```python(.*?)```", completion, re.DOTALL)
     # return match.group(1).strip() if match else completion
     for pattern in pattern_list:
@@ -31,6 +45,7 @@ def _extract_code(completion: str) -> str:
         except:
             continue
     return completion
+
 
 def classeval_unittest_reward_function(
     prompts: list[list[dict[str, str]]],
@@ -64,7 +79,9 @@ def classeval_unittest_reward_function(
             class_constructor=class_constructors[i],
             methods_info=methods_infos[i],
         )
-        result = evaluate_classeval_candidate(solution, sample)
+        result: ClassEvalExecutionResult = evaluate_classeval_candidate(
+            solution, sample
+        )
         if result.syntax_error:
             reward = syntax_error_penalty
         else:
@@ -88,6 +105,7 @@ def classeval_unittest_reward_function(
 def ruff_reward_function(
     prompts: list[list[dict[str, str]]],
     completions: list[list[dict[str, str]]],
+    syntax_error_penalty: float,
     **kwargs,
 ) -> list[float]:
     solutions = [_extract_code(comp[0]["content"]) for comp in completions]
@@ -113,16 +131,21 @@ def ruff_reward_function(
             methods_info=sample.methods_info,
             replaced_method={sample.method_name: solution},
         )
-        base_code = build_full_class_code(
-            class_name=sample.class_name,
-            import_statement=sample.import_statement,
-            class_description="",
-            class_constructor=sample.class_constructor,
-            methods_info=sample.methods_info,
-            replaced_method={sample.method_name: f"    def {sample.method_name}(self):\n        pass\n"},
-        )
-        result = evaluate_ruff(assembled_code)
-        base_result = evaluate_ruff(base_code)
+        result: RuffResult = evaluate_ruff(assembled_code)
+        if result.syntax_error:
+            reward = syntax_error_penalty
+        else:
+            base_code = build_full_class_code(
+                class_name=sample.class_name,
+                import_statement=sample.import_statement,
+                class_description="",
+                class_constructor=sample.class_constructor,
+                methods_info=sample.methods_info,
+                replaced_method={
+                    sample.method_name: f"    def {sample.method_name}(self):\n        pass\n"
+                },
+            )
+            base_result = evaluate_ruff(base_code)
         reward = 1 / (1.0 + max(result.n_issues - base_result.n_issues, 0))
         rewards.append(reward)
 
@@ -162,6 +185,7 @@ def mypy_reward_function(
             methods_info=sample.methods_info,
             replaced_method={sample.method_name: solution},
         )
+        result: MypyResult = evaluate_mypy(assembled_code)
         if result.syntax_error:
             reward = syntax_error_penalty
         else:
@@ -171,9 +195,10 @@ def mypy_reward_function(
                 class_description="",
                 class_constructor=sample.class_constructor,
                 methods_info=sample.methods_info,
-                replaced_method={sample.method_name: f"    def {sample.method_name}(self):\n        pass\n"},
+                replaced_method={
+                    sample.method_name: f"    def {sample.method_name}(self):\n        pass\n"
+                },
             )
-            result = evaluate_mypy(assembled_code)
             base_result = evaluate_mypy(base_code)
             reward = 1 / (1.0 + max(result.n_errors - base_result.n_errors, 0))
         rewards.append(reward)
@@ -184,3 +209,32 @@ def mypy_reward_function(
             print(f"Calculated reward: {reward}")
 
     return rewards
+
+def create_reward_funcs(
+    reward_cfg: RewardConfig
+) -> list:
+    return [
+        update_wrapper(
+            partial(
+                classeval_unittest_reward_function,
+                syntax_error_penalty=reward_cfg.syntax_error_penalty,
+            ),
+            classeval_unittest_reward_function,
+        ),
+        update_wrapper(
+            partial(
+                ruff_reward_function,
+                syntax_error_penalty=reward_cfg.syntax_error_penalty,
+                ruff_select=reward_cfg.ruff_select,
+                ruff_ignore=reward_cfg.ruff_ignore,
+            ),
+            ruff_reward_function,
+        ),
+        update_wrapper(
+            partial(
+                mypy_reward_function,
+                syntax_error_penalty=reward_cfg.syntax_error_penalty,
+            ),
+            mypy_reward_function,
+        ),
+    ]

@@ -11,9 +11,7 @@ from trl.trainer.utils import get_peft_config
 from .data import load_classeval_dataset_prompt_only
 from .reward_classeval import (
     RewardConfig,
-    mypy_reward_function,
-    ruff_reward_function,
-    classeval_unittest_reward_function,
+    create_reward_funcs,
 )
 
 
@@ -48,18 +46,7 @@ def main(
         reward_cfg.mypy_weight,
     ]
 
-    def wrapped_unit_test_reward_function(*args, **kwargs):
-        return classeval_unittest_reward_function(
-            *args,
-            syntax_error_penalty=reward_cfg.syntax_error_penalty,
-            **kwargs,
-        )
-
-    reward_funcs = [
-        wrapped_unit_test_reward_function,
-        ruff_reward_function,
-        mypy_reward_function,
-    ]
+    reward_funcs = create_reward_funcs(reward_cfg, custom_args.test_threads)
 
     if model_args.model_name_or_path is None:
         raise ValueError("Model name or path must be specified in model_args.")
