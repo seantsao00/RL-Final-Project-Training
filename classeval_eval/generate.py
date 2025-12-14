@@ -8,7 +8,7 @@ from src.data import load_classeval_dataset_prompt_only
 from src.env_classeval import build_full_class_code
 from src.reward_classeval import RewardConfig
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed
+from transformers import AutoModelForCausalLM, AutoTokenizer, set_seed, GenerationConfig
 from trl.scripts.utils import ScriptArguments, TrlParser
 from trl.trainer.grpo_config import GRPOConfig
 from trl.trainer.model_config import ModelConfig
@@ -68,9 +68,7 @@ def main(
 
     set_seed(training_args.seed)
     eval_start = 99 if eval_args.test_work else custom_args.dataset_train_split_end
-    eval_dataset = load_classeval_dataset_prompt_only(
-        eval_start, 100
-    )
+    eval_dataset = load_classeval_dataset_prompt_only(eval_start, 100)
     if eval_args.test_work:
         print("This is a test run. Only test on 1 class sample.")
     print("eval_dataset size:", len(eval_dataset))
@@ -81,22 +79,21 @@ def main(
         model_args.model_name_or_path,
     ).to(device)
 
-    temperature = training_args.temperature
-
     if eval_args.lora_weights:
         lora_path = Path(eval_args.lora_weights)
         if not lora_path.exists():
             raise FileNotFoundError(f"LoRA weights path '{lora_path}' does not exist.")
         model = PeftModel.from_pretrained(model, str(lora_path))
     else:
-        print("\033[33m[Warning]\033[0m No LoRA adapter provided (eval_args.lora_weights is None).\n"
-              "Using the base model only. If you intended to evaluate a fine-tuned adapter, "
-              "pass --eval_arguments.lora_weights or configure EvalArguments.lora_weights.")
+        print(
+            "\033[33m[Warning]\033[0m No LoRA adapter provided (eval_args.lora_weights is None).\n"
+            "Using the base model only. If you intended to evaluate a fine-tuned adapter, "
+            "pass --eval_arguments.lora_weights or configure EvalArguments.lora_weights."
+        )
 
     model.eval()
 
     greedy = bool(eval_args.greedy)
-    do_sample = not greedy
 
     generated_code: dict[str, dict[str, str]] = {}
     code_metadata: dict[str, dict[str, any]] = {}
@@ -115,12 +112,17 @@ def main(
             return_tensors="pt",
         ).to(device)
 
+        generate_config = GenerationConfig(
+            temperature=0 if greedy else training_args.temperature,
+            top_p=training_args.top_p,
+            top_k=training_args.top_k,
+        )
+
         with torch.no_grad():
             outputs = model.generate(
                 input_ids=input_ids,
                 max_new_tokens=training_args.max_completion_length,
-                do_sample=do_sample,
-                temperature=temperature if do_sample else None,
+                generation_config=generate_config,
                 pad_token_id=tokenizer.pad_token_id,
                 eos_token_id=tokenizer.eos_token_id,
             )

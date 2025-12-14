@@ -62,12 +62,12 @@ if __name__ == "__main__":
     passed_testcases = sum(r["n_passed"] for r in results_summary)
     total_testcases = sum(r["n_total"] for r in results_summary)
     testcase_passrate = (
-        (passed_testcases) if total_testcases > 0 else 0.0
+        (passed_testcases / total_testcases) if total_testcases > 0 else 0.0
     )
 
     total_class = len(results_summary)
     passed_classes = sum(1 for r in results_summary if r["n_passed"] == r["n_total"])
-    class_passrate = (passed_classes) if total_class > 0 else 0.0
+    class_passrate = (passed_classes / total_class) if total_class > 0 else 0.0
     
     print(f"testcase passrate: {testcase_passrate} ({passed_testcases}/{total_testcases})")
     print(f"class passrate: {class_passrate} ({passed_classes}/{total_class})")
