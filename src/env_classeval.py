@@ -1,4 +1,5 @@
 import json
+import re
 import subprocess
 import tempfile
 from contextlib import contextmanager
@@ -128,12 +129,17 @@ def run_unittest(full_test_code: str) -> ClassEvalExecutionResult:
                 "python",
                 candidate_path.as_posix(),
             ],
+            cwd=candidate_path.parent.as_posix(),
             capture_output=True,
             text=True,
         )
 
         result = res.stderr.splitlines(keepends=False)[0]
         print(f"Unittest output: {result}")
+        pruned_result = re.match(r'[.FE]*', result).group()
+        if pruned_result != result:
+            print("pruned_result:", pruned_result)
+            result = pruned_result
         n_total = len(result)
         n_pass = result.count(".")
 

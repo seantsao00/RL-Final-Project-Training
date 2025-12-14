@@ -41,7 +41,7 @@ if __name__ == "__main__":
         with full_test_file.open("w", encoding="utf-8") as f:
             f.write(full_test_code)
 
-        result: ClassEvalExecutionResult = run_unittest(full_test_file)
+        result: ClassEvalExecutionResult = run_unittest(full_test_file.read_text())
 
         test_status: Dict[str, Any] = {
             "class_name": class_name,
@@ -59,17 +59,27 @@ if __name__ == "__main__":
 
         results_summary.append(test_status)
 
-    total = len(results_summary)
-    passed = sum(1 for r in results_summary if r["n_passed"] == r["n_total"])
-    passrate = (passed / total * 100.0) if total > 0 else 0.0
+    passed_testcases = sum(r["n_passed"] for r in results_summary)
+    total_testcases = sum(r["n_total"] for r in results_summary)
+    testcase_passrate = (
+        (passed_testcases) if total_testcases > 0 else 0.0
+    )
+
+    total_class = len(results_summary)
+    passed_classes = sum(1 for r in results_summary if r["n_passed"] == r["n_total"])
+    class_passrate = (passed_classes) if total_class > 0 else 0.0
     
-    print("total passrate:", passrate)
+    print(f"testcase passrate: {testcase_passrate} ({passed_testcases}/{total_testcases})")
+    print(f"class passrate: {class_passrate} ({passed_classes}/{total_class})")
 
     summary_payload = {
         "overall": {
-            "passed": passed,
-            "total": total,
-            "passrate": passrate,
+            "passed_testcases": passed_testcases,
+            "total_testcases": total_testcases,
+            "testcase_passrate": testcase_passrate,
+            "passed_class": passed_classes,
+            "total_class": total_class,
+            "class_passrate": class_passrate,
         },
         "results": results_summary,
     }
@@ -79,7 +89,7 @@ if __name__ == "__main__":
         json.dump(summary_payload, f, ensure_ascii=False, indent=2)
 
     print(
-        f"Saved test summary to {summary_file} | Passrate: {passed}/{total} ({passrate:.2f}%)"
+        f"Saved test summary to {summary_file} | Passrate: {passed_classes}/{total_class} ({class_passrate:.2f}%)"
     )
 
     return results_summary

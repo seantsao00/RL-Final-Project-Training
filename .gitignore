@@ -14,5 +14,4 @@ outputs
 wandb/
 
 checkpoints/
-temp_working_dir/
 classeval_eval/results/
