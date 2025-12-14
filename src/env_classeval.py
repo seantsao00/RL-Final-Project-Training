@@ -219,6 +219,11 @@ def evaluate_ruff(
 def evaluate_mypy(
     assembled_code: str,
 ) -> MypyResult:
+    try:
+        compile(assembled_code, "<string>", "exec")
+    except Exception as e:
+        return MypyResult(n_errors=0, messages=[str(e)], syntax_error=True)
+
     with _temp_code_file(assembled_code) as candidate_path:
         n_errors = 0
         messages: list[str] = []
@@ -247,4 +252,4 @@ def evaluate_mypy(
         except Exception as e:
             print(f"Mypy error: {e}")
 
-        return MypyResult(n_errors=n_errors, messages=messages)
+        return MypyResult(n_errors=n_errors, messages=messages, syntax_error=False)
