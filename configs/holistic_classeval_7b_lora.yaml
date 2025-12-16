@@ -1,0 +1,48 @@
+# Model configuration
+model_name_or_path: Qwen/Qwen2.5-Coder-7B-Instruct
+dtype: bfloat16
+
+# Script arguments
+dataset_train_split: train
+dataset_test_split: test
+dataset_train_max_samples: 1000
+train_test_split_ratio: 0.8  # 80% train, 20% test from original dataset
+
+# Training configuration (GRPOConfig)
+output_dir: ./checkpoints
+learning_rate: 5e-5
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 32
+num_generations: 4
+num_train_epochs: 6
+max_prompt_length: 512
+max_completion_length: 512
+logging_steps: 1
+save_strategy: epoch
+report_to: wandb
+run_name: holistic-grpo7b-1214-classeval
+temperature: 1
+beta: 0.0
+
+# Evaluation configuration
+#eval_strategy: no
+#eval_steps: 5
+#per_device_eval_batch_size: 2
+
+# LoRA configuration
+use_peft: true
+lora_r: 4
+lora_alpha: 16
+lora_target_modules: all-linear
+# lora_target_modules:
+#   - q_proj
+#   - v_proj
+
+# Reward configuration
+tests_weight: 1
+ruff_weight: 0.5
+mypy_weight: 1.5
+syntax_error_penalty: -1.0
+
+# Custom configurations
+seed: 42
