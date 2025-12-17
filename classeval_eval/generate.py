@@ -187,6 +187,10 @@ if __name__ == "__main__":
         test_files=test_files,
         composed_files=composed_files,
         summary_file=summary_file,
+        ruff_config={
+            "select": reward_cfg.ruff_select,
+            "ignore": reward_cfg.ruff_ignore,
+        }
     )
     # Message moved to evaluate.py; still confirm code and summary locations
     print(f"Saved composed class code to {code_dir}")

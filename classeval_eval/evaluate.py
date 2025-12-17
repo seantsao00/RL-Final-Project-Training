@@ -16,6 +16,7 @@ def run_evaluation_and_save(
     test_files: list[Path],
     composed_files: list[Path],
     summary_file: Path,
+    ruff_config: dict,
 ) -> list[dict[str, any]]:
     results_summary: dict[dict[str, any]] = {}
     composed_map: dict[str, Path] = {}
@@ -31,7 +32,9 @@ def run_evaluation_and_save(
         )
 
         class_code = class_file.read_text()
-        ruff_report = evaluate_ruff(class_code)
+        ruff_report = evaluate_ruff(
+            class_code, ruff_config["select"], ruff_config["ignore"]
+        )
         mypy_report = evaluate_mypy(class_code)
 
         test_status: dict[str, any] = {
@@ -182,4 +185,8 @@ if __name__ == "__main__":
         test_files=test_files,
         composed_files=composed_files,
         summary_file=summary_file,
+        ruff_config={
+            "select": ["F", "E", "W", "C90", "N", "UP", "B", "A", "C4", "RET", "SIM", "ARG"],
+            "ignore": ["E501", "E741", "W292"],
+        }
     )
