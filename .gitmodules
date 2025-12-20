@@ -1,0 +1,3 @@
+[submodule "ClassEval"]
+	path = ClassEval
+	url = git@github.com:FudanSELab/ClassEval.git

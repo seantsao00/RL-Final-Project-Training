@@ -131,17 +131,40 @@ def run_unittest(full_test_code: str) -> ClassEvalExecutionResult:
         )
 
     with _temp_code_file(full_test_code) as candidate_path:
-        res = subprocess.run(
-            [
-                "python",
-                candidate_path.as_posix(),
-            ],
-            cwd=candidate_path.parent.as_posix(),
-            capture_output=True,
-            text=True,
-        )
+        try:
+            res = subprocess.run(
+                [
+                    "python",
+                    candidate_path.as_posix(),
+                ],
+                cwd=candidate_path.parent.as_posix(),
+                capture_output=True,
+                text=True,
+                timeout=10.0,  # 10 second timeout per test file
+            )
+        except subprocess.TimeoutExpired:
+            return ClassEvalExecutionResult(
+                n_passed=0,
+                n_total=0,
+                timed_out=True,
+                runtime_error=False,
+                syntax_error=False,
+                stderr="Test execution timed out after 10 seconds",
+            )
 
-        result = res.stderr.splitlines(keepends=False)[0]
+        stderr_lines = res.stderr.splitlines(keepends=False)
+        if not stderr_lines:
+            # No output, likely a runtime error or empty test
+            return ClassEvalExecutionResult(
+                n_passed=0,
+                n_total=0,
+                timed_out=False,
+                runtime_error=True,
+                syntax_error=False,
+                stderr=res.stderr,
+            )
+        
+        result = stderr_lines[0]
         print(f"Unittest output: {result}")
         pruned_result = re.match(r"[.FE]*", result).group()
         if pruned_result != result:
@@ -208,7 +231,6 @@ def evaluate_ruff(
                     "ruff",
                     "check",
                     "--select=" + ",".join(select),
-                    "--ignore=" + ",".join(ignore),
                     "--output-format=json",
                     candidate_path.as_posix(),
                 ],

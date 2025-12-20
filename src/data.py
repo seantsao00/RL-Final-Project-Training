@@ -76,8 +76,9 @@ def load_classeval_dataset_prompt_only(
         )["train"]
 
     compositional_rows = []
+    
     dataset = dataset.select(range(start, end if end != -1 else len(dataset)))
-
+    print(f"Loading ClassEval dataset from {path}, samples {start} to {end if end != -1 else len(dataset)}. Total samples: {len(dataset)}")
     for class_data in dataset:
         task_id = class_data["task_id"]
         class_name = class_data["class_name"]

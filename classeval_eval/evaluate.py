@@ -31,8 +31,35 @@ def run_evaluation_and_save(
         )
 
         class_code = class_file.read_text()
-        ruff_report = evaluate_ruff(class_code)
+        # Use ruff configuration from training config
+        ruff_select = ["F", "E", "W", "C90", "N", "UP", "B", "A", "C4", "RET", "SIM", "ARG"]
+        ruff_ignore = ["E501", "E741", "W292"]
+        ruff_report = evaluate_ruff(class_code, select=ruff_select, ignore=ruff_ignore)
         mypy_report = evaluate_mypy(class_code)
+
+        print(f"Class: {class_name}, Ruff issues: {ruff_report.n_issues}, Mypy errors: {mypy_report.n_errors}")
+        
+        # Save ruff and mypy outputs to files
+        output_dir = full_test_file.parent / "analysis"
+        output_dir.mkdir(exist_ok=True)
+        
+        if ruff_report.messages:
+            ruff_output_file = output_dir / f"{class_name}_ruff.txt"
+            with ruff_output_file.open("w", encoding="utf-8") as f:
+                f.write(f"Ruff Analysis for {class_name}\n")
+                f.write("=" * 80 + "\n\n")
+                f.write(f"Total issues: {ruff_report.n_issues}\n\n")
+                for i, msg in enumerate(ruff_report.messages, 1):
+                    f.write(f"{i}. {msg}\n")
+        
+        if mypy_report.messages:
+            mypy_output_file = output_dir / f"{class_name}_mypy.txt"
+            with mypy_output_file.open("w", encoding="utf-8") as f:
+                f.write(f"Mypy Analysis for {class_name}\n")
+                f.write("=" * 80 + "\n\n")
+                f.write(f"Total errors: {mypy_report.n_errors}\n\n")
+                for i, msg in enumerate(mypy_report.messages, 1):
+                    f.write(f"{i}. {msg}\n")
 
         test_status: dict[str, any] = {
             "class_name": class_name,

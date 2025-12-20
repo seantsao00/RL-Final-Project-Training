@@ -71,7 +71,7 @@ def main(
     eval_dataset = load_classeval_dataset_prompt_only(eval_start, 100)
     if eval_args.test_work:
         print("This is a test run. Only test on 1 class sample.")
-    print("eval_dataset size:", len(eval_dataset))
+    print(eval_start, "eval_dataset size:", len(eval_dataset))
     tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path)
     tokenizer.padding_side = "left"
 
@@ -176,7 +176,8 @@ if __name__ == "__main__":
     unittest.main()
 """
 
-        full_test_file = code_dir / class_name / f"full_test_{class_name}.py"
+        
+         = code_dir / class_name / f"full_test_{class_name}.py"
         full_test_file.parent.mkdir(parents=True, exist_ok=True)
         with full_test_file.open("w", encoding="utf-8") as f:
             f.write(full_test_code)
