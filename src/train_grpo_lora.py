@@ -54,9 +54,17 @@ def main(
             **kwargs,
         )
 
+    def wrapped_ruff_reward_function(*args, **kwargs):
+        return ruff_reward_function(
+            *args,
+            ruff_select=reward_cfg.ruff_select,
+            ruff_ignore=reward_cfg.ruff_ignore,
+            **kwargs,
+        )
+
     reward_funcs = [
         wrapped_unit_test_reward_function,
-        ruff_reward_function,
+        wrapped_ruff_reward_function,
         mypy_reward_function,
     ]
 
