@@ -51,7 +51,8 @@ def load_apps_dataset_prompt_only(
 
 
 def load_classeval_dataset_prompt_only(
-    start: int = 0, end : int = -1,
+    start: int = 0,
+    end: int = -1,
     path: Path = (
         Path(__file__).resolve().parents[2]
         / "ClassEval"
@@ -74,7 +75,7 @@ def load_classeval_dataset_prompt_only(
             "json",
             data_files=str(path),
         )["train"]
-    
+
     compositional_rows = []
     dataset = dataset.select(range(start, end if end != -1 else len(dataset)))
 
@@ -87,18 +88,16 @@ def load_classeval_dataset_prompt_only(
         class_test_code = class_data["test"]
         methods_info = class_data["methods_info"]
         skeleton = class_data["skeleton"]
-        
+
         for target_method_info in methods_info:
             target_method_name = target_method_info["method_name"]
             target_test_code = target_method_info["test_code"]
-            
+
             # Create conversational prompt
             prompt = get_classeval_compositional_prompt(
-                skeleton, 
-                target_method_name,
-                class_name
+                skeleton, target_method_name, class_name
             )
-            
+
             # Create row
             row = {
                 "prompt": prompt,
@@ -112,14 +111,13 @@ def load_classeval_dataset_prompt_only(
                 "methods_info": methods_info,
             }
             compositional_rows.append(row)
-        
-    
+
     dataset = Dataset.from_list(compositional_rows)
 
     return dataset
 
 
-def get_system_prompt(dataset_name) -> str:
+def get_system_prompt(dataset_name="apps") -> str:
     if dataset_name == "apps":
         return """You are Qwen, created by Alibaba Cloud. You are a helpful assistant.
 You will be given a programming question and you must provide a solution in Python. 
@@ -135,13 +133,10 @@ Your output must be only valid Python code, no explanations, no comments, no doc
 The implementation should adhere to the provided method signatures and docstrings.
 """
 
-def get_user_prompt(question: str, dataset_name) -> str:
-    if dataset_name == "apps":
-        return f"""Question:
-{question}
-"""
 
-    return f"""Question:\n{question}\n\n\nSolution pure Python program:
+def get_user_prompt(question: str) -> str:
+    return f"""Question:
+{question}
 """
 
 
@@ -150,7 +145,7 @@ def get_prompt_only_conversational_prompt(
 ) -> list[dict[str, str]]:
     return [
         {"role": "system", "content": get_system_prompt(dataset_name)},
-        {"role": "user", "content": get_user_prompt(question, dataset_name)},
+        {"role": "user", "content": get_user_prompt(question)},
     ]
 
 
@@ -199,4 +194,3 @@ def build_tests(input_output: str) -> list[tuple[str, str]]:
         return tests
     except (AssertionError, KeyError, json.JSONDecodeError):
         return []
-
