@@ -1,259 +1,246 @@
 #!/usr/bin/env python3
+"""
+Calculate rewards (syntax error, mypy, and ruff) for APPS dataset completions.
+
+This script evaluates code completions from APPS dataset and calculates:
+- Syntax error detection
+- Ruff reward (based on code quality issues)
+- Mypy reward (based on type checking errors)
+
+Usage:
+    python calculate_rewards_apps.py --input apps_eval/7bbaseline.jsonl
+"""
+import argparse
 import json
-import subprocess
-import tempfile
-from pathlib import Path
+import statistics
+import sys
+import os
+import re
 
-RUFF_SELECT = [
-    "F", 
-    "E",
-    "W",
-    "C90",
-    "N",
-    "UP",
-    "B",
-    "A",
-    "C4",
-    "RET",
-    "SIM",
-    "ARG",
-]
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-RUFF_IGNORE = [
-    "E501",
-    "E741",
-    "W292",
-]
+from src.env import evaluate_ruff, evaluate_mypy
 
 SYNTAX_ERROR_PENALTY = -1.0
 
+
+def extract_code_from_completion(completion: str) -> str:
+    """Extract Python code from completion, handling markdown code blocks."""
+    match = re.search(r"```python(.*?)```", completion, re.DOTALL)
+    if match:
+        code = match.group(1).strip()
+    else:
+        match = re.search(r"```(.*?)```", completion, re.DOTALL)
+        if match:
+            code = match.group(1).strip()
+        else:
+            code = completion.strip()
+    
+    return code
+
+
 def check_syntax_error(code: str) -> bool:
+    """Check if code has syntax errors."""
     try:
         compile(code, "<string>", "exec")
         return False
     except SyntaxError:
         return True
+    except Exception:
+        # Other compilation errors (not syntax errors)
+        return False
 
 
-def evaluate_ruff_standalone(code: str) -> tuple[bool, int, list[str]]:
-    if check_syntax_error(code):
-        return True, 0, ["Syntax error"]
-    
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        tmp_path = Path(tmp_dir) / "code.py"
-        tmp_path.write_text(code)
-        try:
-            result = subprocess.run(
-                [
-                    "ruff",
-                    "check",
-                    "--select=" + ",".join(RUFF_SELECT),
-                    "--ignore=" + ",".join(RUFF_IGNORE),
-                    "--output-format=json",
-                    str(tmp_path),
-                ],
-                capture_output=True,
-                text=True,
-                timeout=10.0,
-            )
-            if result.stdout:
-                issues = json.loads(result.stdout)
-                n_issues = len(issues) if isinstance(issues, list) else 0
-                messages = [issue.get("message", "") for issue in issues] if isinstance(issues, list) else []
-            else:
-                n_issues = 0
-                messages = []
-                
-            return False, n_issues, messages
-            
-        except Exception as e:
-            print(f"Ruff error: {e}")
-            return False, 0, []
-
-
-def evaluate_mypy_standalone(code: str) -> tuple[bool, int, list[str]]:
-    if check_syntax_error(code):
-        return True, 0, ["Syntax error"]
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        tmp_path = Path(tmp_dir) / "code.py"
-        tmp_path.write_text(code)
-        try:
-            result = subprocess.run(
-                [
-                    "mypy",
-                    "--strict",
-                    "--no-color-output",
-                    "--no-error-summary",
-                    str(tmp_path),
-                ],
-                capture_output=True,
-                text=True,
-                timeout=10.0,
-            )
-            error_lines = [
-                line for line in result.stdout.splitlines() if ": error:" in line
-            ]
-            n_errors = len(error_lines)
-            messages = error_lines
-            
-            return False, n_errors, messages
-            
-        except Exception as e:
-            print(f"Mypy error: {e}")
-            return False, 0, []
-
-
-def calculate_ruff_reward(code: str) -> float:
-    syntax_error, n_issues, _ = evaluate_ruff_standalone(code)
-    if syntax_error:
-        return SYNTAX_ERROR_PENALTY
-    return 1.0 / (1.0 + n_issues)
-
-
-def calculate_mypy_reward(code: str) -> float:
-    syntax_error, n_errors, _ = evaluate_mypy_standalone(code)
-    if syntax_error:
-        return SYNTAX_ERROR_PENALTY
-    return 1.0 / (1.0 + n_errors)
-
-
-def analyze_file(file_path: str, model_name: str):
+def process_file(file_path: str):
+    """Process APPS completions file and calculate rewards."""
     completions = []
-    with open(file_path, 'r') as f:
+    with open(file_path, 'r', encoding='utf-8') as f:
         for line in f:
-            line = line.strip()
-            if line:
+            if line.strip():
                 completions.append(json.loads(line))
     
+    syntax_errors = 0
     ruff_rewards = []
     mypy_rewards = []
-    syntax_errors = 0
+    ruff_issues_list = []
+    mypy_errors_list = []
+    ruff_syntax_errors = 0
+    mypy_syntax_errors = 0
     
-    for i, completion in enumerate(completions):
-        task_id = completion["task_id"]
-        code = completion["completion"]
+    print(f"Processing {len(completions)} completions...")
+    
+    for idx, completion_entry in enumerate(completions):
+        if idx % 100 == 0 and idx > 0:
+            print(f"  Processed {idx}/{len(completions)} completions...")
         
-        ruff_reward = calculate_ruff_reward(code)
-        mypy_reward = calculate_mypy_reward(code)
-        ruff_rewards.append(ruff_reward)
-        mypy_rewards.append(mypy_reward)
+        completion_code = completion_entry.get("completion", "")
         
-        if ruff_reward == SYNTAX_ERROR_PENALTY or mypy_reward == SYNTAX_ERROR_PENALTY:
+        # Extract code from completion (handles markdown code blocks)
+        code = extract_code_from_completion(completion_code)
+        
+        # Check for syntax errors
+        has_syntax_error = check_syntax_error(code)
+        if has_syntax_error:
             syntax_errors += 1
-    
-    avg_ruff = sum(ruff_rewards) / len(ruff_rewards)
-    avg_mypy = sum(mypy_rewards) / len(mypy_rewards)
-    ruff_no_syntax = [r for r in ruff_rewards if r != SYNTAX_ERROR_PENALTY]
-    mypy_no_syntax = [r for r in mypy_rewards if r != SYNTAX_ERROR_PENALTY]
-    avg_ruff_no_syntax = sum(ruff_no_syntax) / len(ruff_no_syntax) if ruff_no_syntax else 0
-    avg_mypy_no_syntax = sum(mypy_no_syntax) / len(mypy_no_syntax) if mypy_no_syntax else 0
-    perfect_ruff = sum(1 for r in ruff_rewards if r == 1.0)
-    perfect_mypy = sum(1 for r in mypy_rewards if r == 1.0)
-    
-    print(f"{'='*80}")
-    print(f"STATISTICS - {model_name}")
-    print(f"{'='*80}")
-    print(f"\nSyntax Errors:")
-    print(f"  Count: {syntax_errors}")
-    print(f"  Percentage: {syntax_errors / len(completions) * 100:.2f}%")
-    
-    print(f"\nRuff Rewards:")
-    print(f"  Average (all): {avg_ruff:.4f}")
-    print(f"  Average (no syntax errors): {avg_ruff_no_syntax:.4f}")
-    print(f"  Perfect scores (1.0): {perfect_ruff} ({perfect_ruff / len(completions) * 100:.2f}%)")
-    print(f"  Min: {min(ruff_rewards):.4f}")
-    print(f"  Max: {max(ruff_rewards):.4f}")
-    
-    print(f"\nMypy Rewards:")
-    print(f"  Average (all): {avg_mypy:.4f}")
-    print(f"  Average (no syntax errors): {avg_mypy_no_syntax:.4f}")
-    print(f"  Perfect scores (1.0): {perfect_mypy} ({perfect_mypy / len(completions) * 100:.2f}%)")
-    print(f"  Min: {min(mypy_rewards):.4f}")
-    print(f"  Max: {max(mypy_rewards):.4f}")
-    
-    print(f"\nCombined Reward (0.5*ruff + 0.5*mypy):")
-    combined_rewards = [(r + m) / 2 for r, m in zip(ruff_rewards, mypy_rewards)]
-    avg_combined = sum(combined_rewards) / len(combined_rewards)
-    print(f"  Average: {avg_combined:.4f}")
+        
+        # Evaluate ruff
+        ruff_result = evaluate_ruff(
+            code,
+            select=["F", "E", "W", "C90", "N", "UP", "B", "A", "C4", "RET", "SIM", "ARG"],
+            ignore=["E501", "E741", "W292"]
+        )
+        
+        # Calculate ruff reward
+        if ruff_result.syntax_error:
+            ruff_reward = SYNTAX_ERROR_PENALTY
+            ruff_syntax_errors += 1
+        else:
+            ruff_reward = 1.0 / (1.0 + ruff_result.n_issues)
+        
+        ruff_rewards.append(ruff_reward)
+        ruff_issues_list.append(ruff_result.n_issues)
+        
+        # Evaluate mypy
+        mypy_result = evaluate_mypy(code)
+        
+        # Calculate mypy reward
+        if mypy_result.syntax_error:
+            mypy_reward = SYNTAX_ERROR_PENALTY
+            mypy_syntax_errors += 1
+        else:
+            mypy_reward = 1.0 / (1.0 + mypy_result.n_errors)
+        
+        mypy_rewards.append(mypy_reward)
+        mypy_errors_list.append(mypy_result.n_errors)
     
     return {
-        "model": model_name,
-        "file": file_path,
-        "total": len(completions),
         "syntax_errors": syntax_errors,
-        "ruff_avg": avg_ruff,
-        "ruff_avg_no_syntax": avg_ruff_no_syntax,
-        "ruff_perfect": perfect_ruff,
-        "mypy_avg": avg_mypy,
-        "mypy_avg_no_syntax": avg_mypy_no_syntax,
-        "mypy_perfect": perfect_mypy,
-        "combined_avg": avg_combined,
+        "ruff_rewards": ruff_rewards,
+        "mypy_rewards": mypy_rewards,
+        "ruff_issues": ruff_issues_list,
+        "mypy_errors": mypy_errors_list,
+        "ruff_syntax_errors": ruff_syntax_errors,
+        "mypy_syntax_errors": mypy_syntax_errors,
     }
 
 
 def main():
-    print("\n" + "="*80)
-    print("HUMANEVAL REWARD ANALYSIS")
-    print("="*80)
+    parser = argparse.ArgumentParser(
+        description="Calculate rewards (syntax error, mypy, ruff) for APPS dataset completions"
+    )
+    parser.add_argument(
+        "--input",
+        required=True,
+        help="Input JSONL file path (e.g., apps_eval/7bbaseline.jsonl)"
+    )
+    parser.add_argument(
+        "--output",
+        help="Optional output JSON file to save detailed results"
+    )
+    args = parser.parse_args()
     
-    # Analyze both files
-    results = []
+    if not os.path.exists(args.input):
+        print(f"Error: Input file '{args.input}' not found.")
+        sys.exit(1)
     
-    # Analyze base model
-    results.append(analyze_file(
-        "base_results.jsonl",
-        "Qwen2.5-Coder-7B-Instruct (Base)"
-    ))
+    print(f"Evaluating rewards for: {args.input}")
+    print("=" * 80)
     
-    # Analyze GRPO trained model
-    results.append(analyze_file(
-        "grpo7b.jsonl",
-        "GRPO-7B (Fine-tuned)"
-    ))
+    results = process_file(args.input)
     
-    # Comparison
-    print(f"\n{'='*80}")
-    print("COMPARISON")
-    print(f"{'='*80}\n")
+    # Calculate statistics
+    total_completions = len(results["ruff_rewards"])
+    syntax_errors = results["syntax_errors"]
+    ruff_syntax_errors = results["ruff_syntax_errors"]
+    mypy_syntax_errors = results["mypy_syntax_errors"]
     
-    base = results[0]
-    grpo = results[1]
+    avg_ruff_issues = statistics.mean(results["ruff_issues"])
+    avg_mypy_errors = statistics.mean(results["mypy_errors"])
     
-    print(f"{'Metric':<40} {'Base':<15} {'GRPO':<15} {'Change':<15}")
-    print("-" * 80)
+    avg_ruff_reward = statistics.mean(results["ruff_rewards"])
+    avg_mypy_reward = statistics.mean(results["mypy_rewards"])
     
-    metrics = [
-        ("Syntax Errors", "syntax_errors", False),
-        ("Ruff Reward (avg)", "ruff_avg", True),
-        ("Ruff Reward (no syntax)", "ruff_avg_no_syntax", True),
-        ("Ruff Perfect Scores", "ruff_perfect", False),
-        ("Mypy Reward (avg)", "mypy_avg", True),
-        ("Mypy Reward (no syntax)", "mypy_avg_no_syntax", True),
-        ("Mypy Perfect Scores", "mypy_perfect", False),
-        ("Combined Reward", "combined_avg", True),
-    ]
+    # Calculate reward based on average issues/errors
+    ruff_reward_from_avg = 1.0 / (1.0 + avg_ruff_issues)
+    mypy_reward_from_avg = 1.0 / (1.0 + avg_mypy_errors)
     
-    for metric_name, key, is_float in metrics:
-        base_val = base[key]
-        grpo_val = grpo[key]
-        change = grpo_val - base_val
+    # Print results
+    print("\n" + "=" * 80)
+    print("REWARD EVALUATION RESULTS")
+    print("=" * 80)
+    print(f"Total completions evaluated: {total_completions}")
+    print()
+    
+    print("Syntax Errors:")
+    print(f"  Python syntax errors (compile check): {syntax_errors} ({syntax_errors/total_completions*100:.2f}%)")
+    print(f"  Ruff detected syntax errors: {ruff_syntax_errors} ({ruff_syntax_errors/total_completions*100:.2f}%)")
+    print(f"  Mypy detected syntax errors: {mypy_syntax_errors} ({mypy_syntax_errors/total_completions*100:.2f}%)")
+    print(f"  Total syntax errors (any source): {syntax_errors + ruff_syntax_errors + mypy_syntax_errors}")
+    print()
+    
+    print("Ruff Rewards:")
+    print(f"  Average ruff issues per completion: {avg_ruff_issues:.2f}")
+    print(f"  Average ruff reward: {avg_ruff_reward:.4f}")
+    print(f"  Ruff reward (from avg issues): {ruff_reward_from_avg:.4f}")
+    print()
+    
+    print("Mypy Rewards:")
+    print(f"  Average mypy errors per completion: {avg_mypy_errors:.2f}")
+    print(f"  Average mypy reward: {avg_mypy_reward:.4f}")
+    print(f"  Mypy reward (from avg errors): {mypy_reward_from_avg:.4f}")
+    print()
+    
+    print("Summary:")
+    print(f"  Syntax error rate: {syntax_errors/total_completions*100:.2f}%")
+    print(f"  Average ruff reward: {avg_ruff_reward:.4f}")
+    print(f"  Average mypy reward: {avg_mypy_reward:.4f}")
+    print("=" * 80)
+    
+    # Save detailed results if output file specified
+    if args.output:
+        output_data = {
+            "input_file": args.input,
+            "total_completions": total_completions,
+            "syntax_errors": {
+                "python_compile": syntax_errors,
+                "ruff_detected": ruff_syntax_errors,
+                "mypy_detected": mypy_syntax_errors,
+            },
+            "ruff": {
+                "average_issues": avg_ruff_issues,
+                "average_reward": avg_ruff_reward,
+                "reward_from_avg": ruff_reward_from_avg,
+            },
+            "mypy": {
+                "average_errors": avg_mypy_errors,
+                "average_reward": avg_mypy_reward,
+                "reward_from_avg": mypy_reward_from_avg,
+            },
+            "per_completion": [
+                {
+                    "ruff_reward": r_reward,
+                    "mypy_reward": m_reward,
+                    "ruff_issues": r_issues,
+                    "mypy_errors": m_errors,
+                }
+                for r_reward, m_reward, r_issues, m_errors in zip(
+                    results["ruff_rewards"],
+                    results["mypy_rewards"],
+                    results["ruff_issues"],
+                    results["mypy_errors"],
+                )
+            ],
+        }
         
-        if is_float:
-            base_str = f"{base_val:.4f}"
-            grpo_str = f"{grpo_val:.4f}"
-            change_str = f"{change:+.4f}"
-        else:
-            base_str = str(base_val)
-            grpo_str = str(grpo_val)
-            change_str = f"{change:+d}"
-        
-        print(f"{metric_name:<40} {base_str:<15} {grpo_str:<15} {change_str:<15}")
-    
-    print(f"\n{'='*80}")
-    print("ANALYSIS COMPLETE")
-    print(f"{'='*80}\n")
+        with open(args.output, 'w', encoding='utf-8') as f:
+            json.dump(output_data, f, indent=2)
+        print(f"\nDetailed results saved to: {args.output}")
 
 
 if __name__ == "__main__":
     main()
+
+
+
+
 
