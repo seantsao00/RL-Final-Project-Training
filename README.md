@@ -1,5 +1,7 @@
 # QRCode ClassEval-Holistic
 
+This part is for the training and evaluation part for ClassEval-Holistic In-Dataset evaluation and the ablation study on our reward design and 0/1 reward.
+
 ## Environment Setup
 
 ### install uv and the projects' packages
