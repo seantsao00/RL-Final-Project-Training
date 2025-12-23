@@ -1,0 +1,66 @@
+# Model configuration
+model_name_or_path: Qwen/Qwen2.5-Coder-3B-Instruct
+dtype: auto
+
+# Script arguments
+dataset_train_split: train
+dataset_test_split: train
+
+# Training configuration (GRPOConfig)
+output_dir: ./checkpoints/half_train
+learning_rate: 1.0e-5
+per_device_train_batch_size: 2
+gradient_accumulation_steps: 24
+num_generations: 16
+num_train_epochs: 5
+max_prompt_length: 1024
+max_completion_length: 1024
+logging_steps: 1
+save_strategy: epoch
+report_to: wandb
+run_name: half_train
+temperature: 0.7
+beta: 0.0
+
+# Evaluation configuration
+#eval_strategy: no
+#eval_steps: 5
+#per_device_eval_batch_size: 2
+
+# LoRA configuration
+use_peft: true
+lora_r: 8
+lora_alpha: 32
+lora_target_modules: all-linear
+# lora_target_modules:
+#   - q_proj
+#   - v_proj
+
+# Reward configuration
+tests_weight: 0.4
+ruff_weight: 0.4
+mypy_weight: 0.2
+syntax_error_penalty: -1.0
+ruff_select:
+- F    # Pyflakes (Correctness)
+- E    # pycodestyle (Style)
+- W    # pycodestyle (Style)
+- C90  # mccabe (Complexity)
+- N    # pep8-naming (Naming)
+- UP   # pyupgrade (Modern Python)
+- B    # flake8-bugbear (Bugs)
+- A    # flake8-builtins (Shadowing)
+- C4   # flake8-comprehensions (Performance)
+- RET  # flake8-return (Clean Returns)
+- SIM  # flake8-simplify (Code Simplification)
+- ARG  # flake8-unused-arguments (Cleanliness)
+
+ruff_ignore:
+- E501 # Line too long (often unavoidable in complex algorithmic one-liners or input parsing)
+- E741 # Ambiguous variable name (allows 'l', 'O', 'I' which are common in CP for pointers/indices)
+- W292 # No newline at end of file
+
+
+# Custom configurations
+seed: 42
+dataset_train_split_end: 50
