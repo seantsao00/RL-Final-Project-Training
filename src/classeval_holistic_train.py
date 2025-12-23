@@ -13,6 +13,8 @@ from .reward import (
     RewardConfig,
     mypy_reward_function,
     ruff_reward_function,
+    ablation_mypy_reward_function,
+    ablation_ruff_reward_function
 )
 from .holisitc_classeval.reward import unit_test_reward_function
 
@@ -22,6 +24,7 @@ class CustomArguments:
     dataset_train_max_samples: int | None = None
     test_threads: int | None = None
     train_test_split_ratio: float = 0.8
+    ablation: int = 0
 
 
 def main(
@@ -66,11 +69,18 @@ def main(
     #         **kwargs,
     #     )
 
-    reward_funcs = [
-        wrapped_unit_test_reward_function,
-        ruff_reward_function,
-        mypy_reward_function,
-    ]
+    if custom_args.ablation == 1:
+        reward_funcs = [
+            wrapped_unit_test_reward_function,
+            ablation_ruff_reward_function,
+            ablation_mypy_reward_function,
+        ]
+    else:
+        reward_funcs = [
+            wrapped_unit_test_reward_function,
+            ruff_reward_function,
+            mypy_reward_function,
+        ]
 
     if model_args.model_name_or_path is None:
         raise ValueError("Model name or path must be specified in model_args.")

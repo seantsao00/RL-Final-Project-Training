@@ -14,3 +14,10 @@ outputs
 wandb/
 
 checkpoints/
+
+results/
+
+evaluation_results/
+
+.mypy_cache/
+.ruff_cache/
